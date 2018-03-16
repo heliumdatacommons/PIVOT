@@ -25,8 +25,6 @@ class Cluster(Loggable, metaclass=Singleton):
   MONITOR_INTERVAL = 30000 # query cluster info every minute
 
   def __init__(self, config):
-    self.__master_url_base = '%s/%s'%(config['dcos']['master_url'],
-                                      config['dcos']['mesos_master_route'])
     self.__config = config
     self.__http_cli = SecureAsyncHttpClient(config)
     self.__hosts = []
@@ -40,7 +38,7 @@ class Cluster(Loggable, metaclass=Singleton):
 
   async def monitor(self):
     async def query_mesos():
-        status, body, err = await self.__http_cli.get('%s/slaves'%self.__master_url_base)
+        status, body, err = await self.__http_cli.get('%s/slaves'%self.__config.url.mesos_master)
         if status != 200:
           self.logger.debug(err)
           return

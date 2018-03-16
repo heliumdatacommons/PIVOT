@@ -1,12 +1,11 @@
 {
   "dcos": {
     "master_url": "http://18.188.11.136",
-    "mesos_master_route": "mesos/master",
-    "service_scheduler_route": "service/marathon/v2",
-    "job_scheduler_route": "service/chronos/v1/scheduler",
+    "mesos_master_endpoint": "mesos/master",
+    "service_scheduler_endpoint": "service/marathon/v2",
+    "job_scheduler_endpoint": "service/chronos/v1/scheduler",
     "token_file_path": "/Users/fanjiang/.dcos_token"
   },
   "port": 9090,
-  "n_parallel": 1,
-  "vnet_cidr": "172.16.0.0/16"
+  "n_parallel": 1
 }

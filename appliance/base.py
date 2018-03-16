@@ -10,7 +10,7 @@ class Appliance:
 
   @property
   def id(self):
-      return self.__id
+    return self.__id
 
   @property
   def containers(self):
@@ -36,6 +36,4 @@ class Appliance:
                             for c in self.containers])
 
   def to_save(self):
-    return dict(id=self.id,
-                containers=[c if isinstance(c, str) else c.id for c in self.containers],
-                pending=self.pending)
+    return dict(id=self.id, pending=self.pending)

@@ -1,6 +1,12 @@
 from enum import Enum
 
 
+class ContainerType(Enum):
+
+  SERVICE = 'service'
+  JOB = 'job'
+
+
 class ContainerState(Enum):
 
   SUBMITTED = 'submitted'
@@ -202,7 +208,7 @@ class Container:
                dependencies=[], rack=None, host=None, last_update=None, **kwargs):
     self.__id = id
     self.__appliance = appliance
-    self.__type = type
+    self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
     self.__image = image
     self.__resources = Resources(**resources)
     self.__cmd = cmd
@@ -336,7 +342,7 @@ class Container:
     self.__dependencies.append(dep)
 
   def to_render(self):
-    return dict(id=self.id, appliance=self.appliance, type=self.type,
+    return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
                 cmd=self.cmd, args=self.args, env=self.env,
                 volumes=[v.to_render() for v in self.volumes],
@@ -348,7 +354,7 @@ class Container:
                 rack=self.rack, host=self.host, last_update=self.last_update)
 
   def to_save(self):
-    return dict(id=self.id, appliance=self.appliance, type=self.type,
+    return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_save(),
                 cmd=self.cmd, args=self.args, env=self.env,
                 volumes=[v.to_save() for v in self.volumes],

@@ -3,11 +3,19 @@ import json
 import motor
 import logging
 
+from collections import namedtuple
 from tornado.httpclient import AsyncHTTPClient, HTTPError
+
+
+Config = namedtuple('Config', 'dcos port n_parallel url')
+DCOSConfig = namedtuple('DCOSConfig', 'token_file_path master_url mesos_master_endpoint '
+                                      'service_scheduler_endpoint job_scheduler_endpoint')
+URLMap = namedtuple('URLMap', 'mesos_master service_scheduler job_scheduler')
 
 
 def message(msg):
   return dict(message=msg)
+
 
 def error(msg):
   return dict(error=msg)
@@ -48,7 +56,7 @@ class Loggable(object):
 class SecureAsyncHttpClient(Loggable):
 
   def __init__(self, config):
-    self.__config = dict(config)
+    self.__config = config
     self.__cli = AsyncHTTPClient()
     self.__headers = {
       'Content-Type': 'application/json',
@@ -83,5 +91,5 @@ class SecureAsyncHttpClient(Loggable):
       return e.response.code, None, error(e.response.body.decode('utf-8'))
 
   def _read_auth_token(self):
-    with open(self.__config['dcos']['token_file_path']) as f:
+    with open(self.__config.dcos.token_file_path) as f:
       return f.readline().strip('\n')
