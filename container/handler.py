@@ -41,13 +41,13 @@ class ContainersHandler(RequestHandler, Loggable):
     data = tornado.escape.json_decode(self.request.body)
     data['appliance'] = app_id
     status, contr, err = await self.__contr_mgr.create_container(data)
-    if status != 200:
+    if err:
       self.set_status(status)
       self.write(json.dumps(error(err)))
       return
     status, contr, err = await self.__contr_mgr.provision_container(contr)
     self.set_status(status)
-    self.write(json.dumps(contr.to_render() if status == 200 else error(err)))
+    self.write(json.dumps(contr.to_render() if status == 201 else error(err)))
 
 
 class ContainerHandler(RequestHandler, Loggable):

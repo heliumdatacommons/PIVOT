@@ -2,7 +2,7 @@ import datetime
 
 from datetime import timedelta
 
-from container.base import Container, ContainerType
+from container.base import Container, ContainerType, ContainerState
 from container.service import Service
 from container.job import Job
 from cluster.base import Cluster
@@ -27,12 +27,12 @@ class ContainerManager(Loggable, metaclass=Singleton):
     if not contr.last_update or \
         datetime.datetime.now(tz=None) - contr.last_update > self.CONTAINER_REC_TTL:
       status, contr, err = await self._get_updated_container(contr)
-      if status == 404:
+      if status == 404 and contr.state != ContainerState.SUBMITTED:
         await self._delete_container_from_db(contr)
-        return 404, None, "Container '%s' is not found"%contr_id
+        return 404, None, err
       if status == 200:
         await self._save_container_to_db(contr, False)
-      else:
+      elif status != 404:
         self.logger.error("Failed to update container '%s'"%contr)
         self.logger.error(err)
     return 200, contr, None
@@ -65,31 +65,31 @@ class ContainerManager(Loggable, metaclass=Singleton):
     status, _, _ = await self._get_container_from_db(data['appliance'], data['id'])
     if status == 200:
       return 409, None, "Container '%s' already exists"%data['id']
-    contr = self._instantiate_container(data)
-    if not contr:
-      errmsg = 'Unknown container type: %s'%contr.type
-      self.logger.error(errmsg)
-      return 400, None, errmsg
-    await self._save_container_to_db(contr, True)
-    return 200, contr, None
+    try:
+      contr = self.instantiate_container(data)
+      await self._save_container_to_db(contr, True)
+      return 201, contr, None
+    except ValueError as e:
+      return 422, None, str(e)
 
   async def delete_container(self, app_id, contr_id):
     status, contr, err = await self._get_container_from_db(app_id, contr_id)
     if status == 404:
       return status, None, err
-    if contr.type == ContainerType.SERVICE:
-      status, msg, err = await self._delete_service(contr)
-      if err:
-        self.logger.error(err)
-      else:
-        self.logger.info(msg)
-    elif contr.type == ContainerType.JOB:
-      _, _, kill_job_err = await self._kill_job_tasks(contr)
-      if kill_job_err:
-        self.logger.error(kill_job_err)
-      _, _, del_job_err = await self._delete_job(contr)
-      if del_job_err:
-        self.logger.error(del_job_err)
+    if contr.state != ContainerState.SUBMITTED:
+      if contr.type == ContainerType.SERVICE:
+        status, msg, err = await self._delete_service(contr)
+        if err:
+          self.logger.error(err)
+        else:
+          self.logger.info(msg)
+      elif contr.type == ContainerType.JOB:
+        _, _, kill_job_err = await self._kill_job_tasks(contr)
+        if kill_job_err:
+          self.logger.error(kill_job_err)
+        _, _, del_job_err = await self._delete_job(contr)
+        if del_job_err:
+          self.logger.error(del_job_err)
     await self._delete_container_from_db(contr)
     return 200, "Container '%s' has been deleted"%contr, None
 
@@ -98,8 +98,10 @@ class ContainerManager(Loggable, metaclass=Singleton):
     for c in await self._get_containers_from_db(**filters):
       status, msg, err = await self.delete_container(c.appliance, c.id)
       if err:
-        self.logger.error(err)
-        failed += [c.id]
+        if status != 404:
+          self.logger.error(err)
+          failed += [c.id]
+        self.logger.info("Container '%s' no more exists"%c)
       else:
         self.logger.info(msg)
     if failed:
@@ -119,14 +121,21 @@ class ContainerManager(Loggable, metaclass=Singleton):
       return status, None, err
     return status, contr, None
 
+  def instantiate_container(self, contr):
+    if contr['type'] == ContainerType.SERVICE.value:
+      return Service(**contr)
+    if contr['type'] == ContainerType.JOB.value:
+      return Job(**contr)
+    raise ValueError("Unknown container type: %s"%contr['type'])
+
   async def _get_container_from_db(self, app_id, contr_id):
     contr = await self.__contr_col.find_one(dict(id=contr_id, appliance=app_id))
     if not contr:
       return 404, None, "Container '%s' is not found"%contr_id
-    return 200, self._instantiate_container(contr), None
+    return 200, self.instantiate_container(contr), None
 
   async def _get_containers_from_db(self, **filters):
-    return [self._instantiate_container(c) async for c in self.__contr_col.find(filters)]
+    return [self.instantiate_container(c) async for c in self.__contr_col.find(filters)]
 
   async def _save_container_to_db(self, contr, upsert=True):
     await self.__contr_col.replace_one(dict(id=contr.id, appliance=contr.appliance),
@@ -187,9 +196,9 @@ class ContainerManager(Loggable, metaclass=Singleton):
     return status, job, None
 
   async def _provision_service(self, service):
-    url = '%s/groups'%self.__config.url.service_scheduler
-    body = dict(id='/' + service.appliance, apps=[service.to_request()])
-    return await self.__http_cli.put(url, body)
+    url = '%s/apps'%self.__config.url.service_scheduler
+    body = dict(service.to_request())
+    return await self.__http_cli.post(url, body)
 
   async def _delete_service(self, contr):
     return await self.__http_cli.delete('%s/apps%s'%(self.__config.url.service_scheduler, contr))
@@ -202,12 +211,5 @@ class ContainerManager(Loggable, metaclass=Singleton):
 
   async def _delete_job(self, contr):
     return await self.__http_cli.delete('%s/job/%s'%(self.__config.url.job_scheduler, contr))
-
-  def _instantiate_container(self, contr):
-    if contr['type'] == ContainerType.SERVICE.value:
-      return Service(**contr)
-    if contr['type'] == ContainerType.JOB.value:
-      return Job(**contr)
-    return None
 
 
