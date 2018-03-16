@@ -4,142 +4,12 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
 from collections import deque
 
-from container import Container, Endpoint, ContainerState, ContainerManager
+from container.base import Container, Endpoint, ContainerState
+from container.manager import ContainerManager
 from util import message, error
 from util import Singleton, MotorClient, Loggable
-from util import HTTP_METHOD_GET
+from util import SecureAsyncHttpClient
 from config import config, cluster_to_ip, ip_to_cluster
-
-
-class Appliance:
-
-  def __init__(self, id, containers=[], pending=[], **kwargs):
-    self.__id = id
-    self.__containers = list(containers)
-    self.__pending = deque(pending)
-
-  @property
-  def id(self):
-      return self.__id
-
-  @property
-  def containers(self):
-    return self.__containers
-
-  @property
-  def pending(self):
-    return list(self.__pending)
-
-  @containers.setter
-  def containers(self, contrs):
-    self.__containers = list(contrs)
-
-  def enqueue_pending_containers(self, contr_id):
-    self.__pending.append(contr_id)
-
-  def dequeue_pending_container(self):
-    return self.__pending.popleft()
-
-  def to_render(self):
-    return dict(id=self.id,
-                containers=[c if isinstance(c, str) else c.to_render()
-                            for c in self.containers])
-
-  def to_save(self):
-    return dict(id=self.id,
-                containers=[c if isinstance(c, str) else c.id for c in self.containers],
-                pending=self.pending)
-
-
-class ApplianceManager(Loggable, metaclass=Singleton):
-
-  def __init__(self):
-    self.__app_col = MotorClient().requester.appliance
-    self.__http_cli = AsyncHTTPClient()
-    self.__contr_mgr = ContainerManager()
-
-  async def get_appliance(self, app_id, verbose=True):
-    app = await self.__app_col.find_one(dict(id=app_id))
-    if not app:
-      return 404, error("Appliance '%s' is not found"%app_id)
-    app = Appliance(**app)
-    if verbose:
-      status, contrs = await self.__contr_mgr.get_containers(app_id)
-      if status == 200:
-        app.containers = contrs
-    return 200, app
-
-  async def create_appliance(self, app):
-    app = Appliance(**app)
-    app_count = await self.__app_col.count(dict(id=app.id))
-    if app_count > 0:
-      return 409, error("Appliance '%s' already exists" % app.id)
-    if not app.containers:
-      return 400, error('No container in the Appliance "%s"'%app.id)
-
-    app.containers = [Container(**c) for c in app.containers]
-    for c in app.containers:
-      c.appliance, c.state = app.id, ContainerState.PENDING
-      app.enqueue_pending_containers(c.id)
-      c.add_env(SCIDAS_DATA=','.join(c.data),
-                SCIDAS_RESC_CPUS=str(c.resources.cpus),
-                SCIDAS_RESC_MEM=str(c.resources.mem),
-                SCIDAS_RESC_DISK=str(c.resources.disk))
-
-    for c in app.containers:
-      await self.__contr_mgr.save_container(c)
-    await self.save_appliance(app)
-    return 201, app
-
-  async def delete_appliance(self, app_id):
-    status, app = await self.get_appliance(app_id)
-    if status != 200:
-      return status, None, app
-    status, resp = await self.__contr_mgr.delete_containers(app_id)
-    self.__app_col.delete_one(dict(id=app_id))
-    return 200, app, message("Appliance '%s' has been deleted"%app_id)
-
-  async def accept_offer(self, app_id, contr_id, offers):
-    status, resp = await self.get_appliance(app_id, verbose=False)
-    if status != 200:
-      return status, resp, resp
-    app = resp
-    status, resp = await self.__contr_mgr.get_container(app_id, contr_id)
-    if status != 200:
-      return status, resp, resp
-    contr = resp
-    offers = list(filter(lambda o: o['cpus'] and o['mem'] and o['disk']
-                                   and o['cpus'] >= contr.resources.cpus
-                                   and o['mem'] >= contr.resources.mem
-                                   and o['disk'] >= contr.resources.disk,
-                         offers))
-    for o in offers:
-      o['master'] = o['master'].split(':')[0]
-    if contr.cluster:
-      offers = list(filter(lambda o: o['master'] == cluster_to_ip[contr.cluster], offers))
-    if not offers:
-      app.enqueue_pending_containers(contr.id)
-      return 200, app, contr
-    offer = offers[0]
-    contr.cluster = ip_to_cluster.get(offer['master'], None)
-    contr.host = offer['agent']
-    await self.__contr_mgr.save_container(contr)
-    return 200, app, contr
-
-  async def process_next_pending_container(self, app):
-    if not app.pending:
-      return
-    contr_id = app.dequeue_pending_container()
-    await self.save_appliance(app, upsert=False)
-    _, contr = await self.__contr_mgr.get_container(app.id, contr_id)
-    contr.state = ContainerState.SUBMITTED
-    await self.__contr_mgr.save_container(contr)
-    status, _ = await self.__contr_mgr.submit_container(contr)
-    if status != 200:
-      app.enqueue_pending_containers(contr.id)
-
-  async def save_appliance(self, app, upsert=True):
-    await self.__app_col.replace_one(dict(id=app.id), app.to_save(), upsert=upsert)
 
 
 class ApplianceMonitor(Loggable):
@@ -215,16 +85,16 @@ class ApplianceMonitor(Loggable):
             await self.__app_mgr.process_next_pending_container(app)
             contr.reset_waiting_bit()
           else:
-            await self.__contr_mgr.save_container(contr, upsert=False)
+            await self.__contr_mgr._save_container_to_db(contr, upsert=False)
         else:
           contr.state = state
           contr.reset_waiting_bit()
-          await self.__contr_mgr.save_container(contr, upsert=False)
+          await self.__contr_mgr._save_container_to_db(contr, upsert=False)
       except HTTPError as e:
         if e.response.code == 404 and state and state == ContainerState.SUBMITTED:
           _, app = await self.__app_mgr.get_appliance(contr.appliance)
           if isinstance(app, str):
-            await self.__contr_mgr.delete_containers(contr.appliance)
+            await self.__contr_mgr._delete_containers_of_appliance_from_db(contr.appliance)
           elif isinstance(app, Appliance):
             app.enqueue_pending_containers(contr.id)
             await self.__app_mgr.save_appliance(app, upsert=False)
@@ -259,11 +129,11 @@ class ApplianceMonitor(Loggable):
             await self.__app_mgr.process_next_pending_container(app)
             contr.reset_waiting_bit()
           else:
-            await self.__contr_mgr.save_container(contr, upsert=False)
+            await self.__contr_mgr._save_container_to_db(contr, upsert=False)
         else:
           contr.state = state
           contr.reset_waiting_bit()
-          await self.__contr_mgr.save_container(contr, upsert=False)
+          await self.__contr_mgr._save_container_to_db(contr, upsert=False)
 
     async for c in self.__contr_col.find():
       contr = Container(**c)
