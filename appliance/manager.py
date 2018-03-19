@@ -14,6 +14,7 @@ class ApplianceManager(Loggable, metaclass=Singleton):
   def __init__(self, config):
     self.__config = config
     self.__app_col = MotorClient().requester.appliance
+    self.__contr_col = MotorClient().requester.container
     self.__contr_mgr = ContainerManager(config)
     self.__http_cli = SecureAsyncHttpClient(config)
 
@@ -72,7 +73,7 @@ class ApplianceManager(Loggable, metaclass=Singleton):
     await self.__app_col.replace_one(dict(id=app.id), app.to_save(), upsert=upsert)
     return 200, "Appliance '%s' has been saved"%app, None
 
-  async def restore_appliances(self):
+  async def restore_appliance(self, app_id):
     raise NotImplemented
 
   async def _get_appliance_from_db(self, app_id):
@@ -83,6 +84,7 @@ class ApplianceManager(Loggable, metaclass=Singleton):
 
   async def _delete_appliance_from_db(self, app_id):
     await self.__app_col.delete_one(dict(id=app_id))
+    await self.__contr_col.delete_many(dict(appliance=app_id))
     return 200, "Appliance '%s' has been deleted"%app_id, None
 
   async def _deprovision_group(self, app_id):

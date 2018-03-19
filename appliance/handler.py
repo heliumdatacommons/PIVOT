@@ -24,6 +24,7 @@ class AppliancesHandler(RequestHandler, Loggable):
     if status == 201:
       self.__app_monitor.spawn(app)
 
+
 class ApplianceHandler(RequestHandler, Loggable):
 
   def initialize(self, config):

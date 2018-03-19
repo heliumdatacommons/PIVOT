@@ -2,6 +2,7 @@ import sys
 import json
 import motor
 import logging
+import subprocess
 
 from collections import namedtuple
 from tornado.httpclient import AsyncHTTPClient, HTTPError
@@ -43,7 +44,7 @@ class Loggable(object):
                             '::%(lineno)s\t%(message)s')
     logger = logging.getLogger(self.__class__.__name__)
     logger.setLevel(logging.INFO)
-    if not logger.hasHandlers():
+    if not logger.handlers:
       stream_hdlr = logging.StreamHandler(sys.stdout)
       stream_hdlr.setFormatter(fmt)
       file_hdlr = logging.FileHandler('pivot.log')
@@ -60,7 +61,7 @@ class SecureAsyncHttpClient(Loggable):
     self.__cli = AsyncHTTPClient()
     self.__headers = {
       'Content-Type': 'application/json',
-      'Authorization': 'token=%s'%self._read_auth_token()
+      'Authorization': 'token=%s'%self._get_auth_token()
     }
 
   async def get(self, url, **headers):
@@ -90,6 +91,10 @@ class SecureAsyncHttpClient(Loggable):
     except HTTPError as e:
       return e.response.code, None, error(e.response.body.decode('utf-8'))
 
-  def _read_auth_token(self):
-    with open(self.__config.dcos.token_file_path) as f:
-      return f.readline().strip('\n')
+  def _get_auth_token(self):
+    try:
+      out = subprocess.check_output('dcos config show core.dcos_acs_token', shell=True)
+      return out.decode('utf-8').strip('\n')
+    except subprocess.CalledProcessError as e:
+      self.logger.error(e)
+      raise Exception('DC/OS is not properly set up and authenticated')
