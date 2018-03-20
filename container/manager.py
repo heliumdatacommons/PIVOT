@@ -28,6 +28,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
         datetime.datetime.now(tz=None) - contr.last_update > self.CONTAINER_REC_TTL:
       status, contr, err = await self._get_updated_container(contr)
       if status == 404 and contr.state != ContainerState.SUBMITTED:
+        self.logger.info("Deleted ghost container: %s"%contr)
         await self._delete_container_from_db(contr)
         return 404, None, err
       if status == 200:
@@ -45,7 +46,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
       if c.last_update and cur_time - c.last_update <= self.CONTAINER_REC_TTL:
         continue
       status, c, err = await self._get_updated_container(c)
-      if status == 404:
+      if status == 404 and c.state != ContainerState.SUBMITTED:
         contrs_to_del.append(c)
       if status == 200:
         contrs_to_update.append(c)

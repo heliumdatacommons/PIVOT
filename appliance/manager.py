@@ -145,8 +145,9 @@ class ApplianceMonitor(Loggable):
     self.logger.info('Launch free containers: %s'%free_contrs)
     for c in app.dag.get_free_containers():
       if c.state == ContainerState.SUBMITTED:
-        _, _, err = await self.__contr_mgr.provision_container(c)
-        if err:
+        status, _, err = await self.__contr_mgr.provision_container(c)
+        if status not in (200, 409):
+          self.logger.info(status)
           self.logger.error("Failed to launch container '%s'"%c)
           self.logger.error(err)
     self.logger.info('Update DAG')
