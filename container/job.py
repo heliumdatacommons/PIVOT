@@ -70,15 +70,14 @@ class Job(Container):
     r = dict(name=str(self),
              schedule='R%d/%s/P%s'%(self.repeats, self.start_time, self.interval),
              cpus=self.resources.cpus, mem=self.resources.mem, disk=self.resources.disk,
-             shell=not self.args,
-             environmentVariables=self.env,
+             shell=self.args is None,
+             command = self.cmd if self.cmd else '',
+             environmentVariables=[dict(name=k, value=v) for k, v in self.env.items()],
              container=dict(type='DOCKER',
                             image=self.image,
                             network=self.network_mode.value,
                             volumes=[v.to_request() for v in self.volumes],
                             forcePullImage=self.force_pull_image))
-    if self.cmd:
-      r['command'] = self.cmd
     if self.args:
       r['arguments'] = self.args
     parameters = [dict(key='privileged', value=self.is_privileged)]

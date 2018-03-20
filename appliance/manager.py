@@ -13,10 +13,11 @@ class ApplianceManager(Loggable, metaclass=Singleton):
 
   def __init__(self, config):
     self.__config = config
+    self.__http_cli = SecureAsyncHttpClient(config)
     self.__app_col = MotorClient().requester.appliance
     self.__contr_col = MotorClient().requester.container
     self.__contr_mgr = ContainerManager(config)
-    self.__http_cli = SecureAsyncHttpClient(config)
+    self.__app_monitor = ApplianceMonitor(self, self.__contr_mgr)
 
   async def get_appliance(self, app_id):
     status, app, err = await self._get_appliance_from_db(app_id)
@@ -44,6 +45,8 @@ class ApplianceManager(Loggable, metaclass=Singleton):
       self.logger.error(err)
       return status, None, err
     self.logger.info(msg)
+    self.logger.info("Start monitoring appliance '%s'"%app)
+    self.__app_monitor.spawn(app)
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -51,6 +54,8 @@ class ApplianceManager(Loggable, metaclass=Singleton):
     if err:
       self.logger.error(err)
       return status, None, err
+    self.logger.info("Stop monitoring appliance '%s'"%app_id)
+    self.__app_monitor.stop(app_id)
     status, msg, err = await self.__contr_mgr.delete_containers(appliance=app_id,
                                                                 type=ContainerType.JOB.value)
     if err:
@@ -61,7 +66,6 @@ class ApplianceManager(Loggable, metaclass=Singleton):
     if err and status != 404:
       self.logger.error(err)
       return 400, None, "Failed to deprovision appliance '%s'"%app_id
-    self.logger.info(msg)
     status, msg, err = await self._delete_appliance_from_db(app_id)
     if err:
       self.logger.error(err)
@@ -124,6 +128,11 @@ class ApplianceMonitor(Loggable):
     self.__callbacks[app.id] = cb
     cb.start()
 
+  def stop(self, app_id):
+    cb = self.__callbacks.pop(app_id, None)
+    if cb:
+      cb.stop()
+
   async def _monitor_appliance(self, app):
     self.logger.info('Containers left: %s'%list(app.dag.parent_map.keys()))
     cb = self.__callbacks.get(app.id, None)
@@ -132,6 +141,14 @@ class ApplianceMonitor(Loggable):
       cb.stop()
       self.__callbacks.pop(app.id, None)
       return
+    free_contrs = [c.id for c in app.dag.get_free_containers()]
+    self.logger.info('Launch free containers: %s'%free_contrs)
+    for c in app.dag.get_free_containers():
+      if c.state == ContainerState.SUBMITTED:
+        _, _, err = await self.__contr_mgr.provision_container(c)
+        if err:
+          self.logger.error("Failed to launch container '%s'"%c)
+          self.logger.error(err)
     self.logger.info('Update DAG')
     for c in app.dag.get_free_containers():
       _, c, err = await self.__contr_mgr.get_container(app.id, c.id)
@@ -144,13 +161,6 @@ class ApplianceMonitor(Loggable):
         app.dag.remove_container(c.id)
       else:
         app.dag.update_container(c)
-    self.logger.info('Launch free containers')
-    for c in app.dag.get_free_containers():
-      if c.state == ContainerState.SUBMITTED:
-        _, _, err = await self.__contr_mgr.provision_container(c)
-        if err:
-          self.logger.error("Failed to launch container '%s'"%c)
-          self.logger.error(err)
     status, msg, err = await self.__app_mgr.save_appliance(app, False)
     if err:
       self.logger.error(err)

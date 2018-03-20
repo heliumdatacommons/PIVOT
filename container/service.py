@@ -151,7 +151,8 @@ class Service(Container):
   def to_request(self):
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
-             env=self.env, labels=self.labels,
+             env={k: str(v) for k, v in self.env.items()},
+             labels=self.labels,
              requirePorts=len(self.ports) > 0,
              acceptedResourceRoles=[ "slave_public", "*" ],
              container=dict(type='DOCKER',
@@ -176,7 +177,7 @@ class Service(Container):
       r['networks'] = [dict(mode='container', name='dcos')]
     # set port definitions
     if self.network_mode == NetworkMode.HOST:
-      r['portDefinitions'] = [dict(protocol=p.protocol, port=p.host_port,
+      r['portDefinitions'] = [dict(protocol=p.protocol, port=p.container_port,
                                    labels={"VIP_%d"%i: "/:%d"%p.load_balanced_port})
                               for i, p in enumerate(self.ports)]
     else:

@@ -196,12 +196,12 @@ class ContainerManager(Loggable, metaclass=Singleton):
     return status, job, None
 
   async def _provision_service(self, service):
-    url = '%s/apps'%self.__config.url.service_scheduler
+    url = '%s/apps?force=true'%self.__config.url.service_scheduler
     body = dict(service.to_request())
     return await self.__http_cli.post(url, body)
 
   async def _delete_service(self, contr):
-    return await self.__http_cli.delete('%s/apps%s'%(self.__config.url.service_scheduler, contr))
+    return await self.__http_cli.delete('%s/apps%s?force=true'%(self.__config.url.service_scheduler, contr))
 
   async def _provision_job(self, job):
     return await self.__http_cli.post('%s/iso8601'%self.__config.url.job_scheduler, job.to_request())
