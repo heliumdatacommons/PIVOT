@@ -1,5 +1,6 @@
 import json
 
+from util import parse_container_short_id
 from container.base import Container, ContainerState, Endpoint, NetworkMode
 
 
@@ -151,7 +152,8 @@ class Service(Container):
   def to_request(self):
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
-             env={k: str(v) for k, v in self.env.items()},
+             env={k: parse_container_short_id(v, self.appliance)
+                  for k, v in self.env.items()},
              labels=self.labels,
              requirePorts=len(self.ports) > 0,
              acceptedResourceRoles=[ "slave_public", "*" ],
@@ -165,9 +167,11 @@ class Service(Container):
                minimumHealthCapacity=self.minimum_capacity,
                maximumOverCapacity=self.maximum_capacity))
     if self.cmd:
-      r['cmd'] = self.cmd
+      r['cmd'] = ' '.join([parse_container_short_id(p, self.appliance)
+                           for p in self.cmd.split()])
     if self.args:
-      r['args'] = self.args
+      r['args'] = [parse_container_short_id(a, self.appliance)
+                   for a in self.args if str(a).strip()]
     # set network mode
     if self.network_mode == NetworkMode.HOST:
       r['networks'] = [dict(mode='host')]

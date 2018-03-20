@@ -1,4 +1,5 @@
-from container.base import Container, NetworkMode, Resources, ContainerState
+from util import parse_container_short_id
+from container.base import Container, NetworkMode, ContainerState
 
 # Limitations:
 # 1. Inefficient job state monitoring: Chronos does not have an API for per-job state
@@ -72,14 +73,20 @@ class Job(Container):
              cpus=self.resources.cpus, mem=self.resources.mem, disk=self.resources.disk,
              shell=self.args is None,
              command = self.cmd if self.cmd else '',
-             environmentVariables=[dict(name=k, value=v) for k, v in self.env.items()],
+             environmentVariables=[dict(name=k,
+                                        value=parse_container_short_id(v, self.appliance))
+                                   for k, v in self.env.items()],
              container=dict(type='DOCKER',
                             image=self.image,
                             network=self.network_mode.value,
                             volumes=[v.to_request() for v in self.volumes],
                             forcePullImage=self.force_pull_image))
     if self.args:
-      r['arguments'] = self.args
+      r['arguments'] = [parse_container_short_id(a, self.appliance)
+                        for a in self.args if str(a).strip()]
+    if self.cmd:
+      r['command'] = ' '.join([parse_container_short_id(p, self.appliance)
+                               for p in self.cmd.split()])
     parameters = [dict(key='privileged', value=self.is_privileged)]
     parameters += [dict(key='publish',
                         value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))

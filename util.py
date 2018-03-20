@@ -1,3 +1,4 @@
+import re
 import sys
 import json
 import motor
@@ -21,6 +22,10 @@ def message(msg):
 def error(msg):
   return dict(error=msg)
 
+def parse_container_short_id(p, appliance):
+  return re.sub(r'(.*)\@([a-z0-9\.-]+)(.*)',
+                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
+                str(p))
 
 class Singleton(type):
     _instances = {}
