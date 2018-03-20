@@ -202,6 +202,8 @@ class Resources:
 
 class Container:
 
+  REQUIRED=frozenset(['id', 'type', 'image', 'resources'])
+
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
@@ -228,6 +230,15 @@ class Container:
     self.__force_pull_image = force_pull_image
     self.__dependencies = dependencies
     self.__last_update = last_update
+
+  @classmethod
+  def pre_check(cls, data):
+    if not isinstance(data, dict):
+      return 422, None, "Failed to parse container data format: %s"%type(data)
+    missing = Container.REQUIRED - data.keys()
+    if missing:
+      return 400, None, "Missing required field(s) of container: %s"%missing
+    return 200, "Container %s is valid"%data['id'], None
 
   @property
   def id(self):

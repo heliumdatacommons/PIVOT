@@ -3,6 +3,7 @@ import tornado
 
 from tornado.web import RequestHandler
 
+from appliance.base import Appliance
 from appliance.manager import ApplianceManager
 from container.manager import ContainerManager
 from util import message, error
@@ -16,10 +17,19 @@ class AppliancesHandler(RequestHandler, Loggable):
     self.__contr_mgr = ContainerManager(config)
 
   async def post(self):
-    data = tornado.escape.json_decode(self.request.body)
-    status, app, err = await self.__app_mgr.create_appliance(data)
-    self.set_status(status)
-    self.write(json.dumps(app.to_render() if status == 201 else error(err)))
+    try:
+      data = tornado.escape.json_decode(self.request.body)
+      status, app, err = Appliance.pre_check(data)
+      if status != 200:
+        self.set_status(status)
+        self.write(error(err))
+        return
+      status, app, err = await self.__app_mgr.create_appliance(data)
+      self.set_status(status)
+      self.write(json.dumps(app.to_render() if status == 201 else error(err)))
+    except json.JSONDecodeError as e:
+      self.set_status(422)
+      self.write(error("Ill-formatted request: %s"%e))
 
 
 class ApplianceHandler(RequestHandler, Loggable):
