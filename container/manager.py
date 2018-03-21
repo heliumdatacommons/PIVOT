@@ -173,7 +173,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
       return status, service, err
     serv_info = Service.parse(resp, self.__cluster)
     service.state, service.endpoints = serv_info['state'], serv_info['endpoints']
-    service.racks, service.hosts = serv_info['racks'], serv_info['hosts']
+    service.rack, service.host = serv_info['rack'], serv_info['host']
     self.logger.debug('Updated service %s' % service)
     return status, service, None
 

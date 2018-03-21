@@ -56,6 +56,7 @@
             <td>ID</td>
             <td>Type</td>
             <td>State</td>
+            <td>Cloud</td>
             <td>Endpoints</td>
           </tr>
         </thead>
@@ -106,10 +107,11 @@
           row.append($('<td>', {text: container.type}));
           row.append($('<td>', {text: container.state, 
                                 style: 'color: ' + getStateColor(container.state) + ';'}));
+          row.append($('<td>', {text: container.rack == null?'':container.rack}))
           var endpoints = [];
           for (j in container.endpoints) {
             var endpoint = container.endpoints[j];
-            endpoints.push(endpoint.host + ':' + endpoint.host_port);
+            endpoints.push(endpoint.host + ':' + endpoint.host_port + '/' + endpoint.protocol);
           }
           row.append($('<td>', {text: endpoints.join(', ')}));
         }

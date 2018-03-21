@@ -110,17 +110,13 @@ class Service(Container):
         else:
           state = ContainerState.FAILED
     # parse endpoints
-    endpoints, racks, hosts = [], [], []
+    endpoints, rack, host = [], None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
         host = cluster.find_host_by_attribute('hostname', t['host'])
         if not host: continue
         host, rack = host[0], host[0].attributes.get('rack', None)
         public_ip = host.attributes.get('public_ip', None)
-        if rack and rack not in racks:
-          racks += [rack]
-        if public_ip not in hosts:
-          hosts += [public_ip]
         if not public_ip: continue
         if 'portDefinitions' in body:
           for i, p in enumerate(body['portDefinitions']):
@@ -132,7 +128,7 @@ class Service(Container):
 
     _, appliance, id = body['id'].split('/')
     return dict(id=id, appliance=appliance, state=state,
-                racks=racks, hosts=hosts, endpoints=endpoints)
+                rack=rack, host=host and host.hostname, endpoints=endpoints)
 
   def add_health_check(self, hc):
     self.__health_checks.append(hc)
