@@ -6,7 +6,7 @@ from container.base import Container, ContainerState, Endpoint, NetworkMode
 
 class HealthCheck:
 
-  def __init__(self, path, protocol='TCP', port_index=0, max_consecutive_failures=3,
+  def __init__(self, path='/', protocol='MESOS_TCP', port_index=0, max_consecutive_failures=3,
                grace_period_seconds=300, interval_seconds=60, timeout_seconds=20):
     self.__path = path
     self.__protocol = protocol
@@ -64,12 +64,13 @@ class HealthCheck:
 
 class Service(Container):
 
-  def __init__(self, instances=1, labels={}, health_checks=[],
+  def __init__(self, instances=1, labels={}, health_checks=[], default_health_checks=True,
                maximum_capacity=1., minimum_capacity=1., **kwargs):
     super(Service, self).__init__(**kwargs)
     self.__instances = instances
     self.__labels = dict(labels)
     self.__health_checks = [HealthCheck(**hc) for hc in health_checks]
+    self.__default_health_checks = default_health_checks
     self.__minimum_capacity = minimum_capacity
     self.__maximum_capacity = maximum_capacity
 
@@ -84,6 +85,10 @@ class Service(Container):
   @property
   def health_checks(self):
     return list(self.__health_checks)
+
+  @property
+  def default_health_checks(self):
+    return self.__default_health_checks
 
   @property
   def maximum_capacity(self):
@@ -138,18 +143,22 @@ class Service(Container):
                 instances=self.instances,
                 labels=self.labels,
                 health_checks=[hc.to_render() for hc in self.health_checks],
+                default_health_checks=self.default_health_checks,
                 maximum_capacity=self.__maximum_capacity,
                 minimum_capacity=self.minimum_capacity)
 
   def to_save(self):
+    self._add_default_health_checks()
     return dict(**super(Service, self).to_save(),
                 instances=self.instances,
                 labels=self.labels,
                 health_checks=[hc.to_save() for hc in self.health_checks],
+                default_health_checks=self.default_health_checks,
                 maximum_capacity=self.__maximum_capacity,
                 minimum_capacity=self.minimum_capacity)
 
   def to_request(self):
+    self._add_default_health_checks()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
              env={k: parse_container_short_id(v, self.appliance)
@@ -195,6 +204,13 @@ class Service(Container):
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'CLUSTER', self.host])
     return r
+
+  def _add_default_health_checks(self):
+    if not self.health_checks and self.default_health_checks:
+      for i, p in enumerate(self.ports):
+        if p.protocol != 'tcp':
+          continue
+        self.add_health_check(HealthCheck(port_index=i))
 
   def __str__(self):
     return '/%s/%s'%(self.appliance, self.id)

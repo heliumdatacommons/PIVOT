@@ -12,7 +12,7 @@ from util import Singleton, MotorClient, Loggable
 
 class ContainerManager(Loggable, metaclass=Singleton):
 
-  CONTAINER_REC_TTL = timedelta(seconds=5)
+  CONTAINER_REC_TTL = timedelta(seconds=3)
 
   def __init__(self, config):
     self.__config = config
