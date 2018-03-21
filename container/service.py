@@ -102,9 +102,13 @@ class Service(Container):
     # parse state
     state = ContainerState.determine_state([t['state'] for t in tasks], min_capacity)
     if state == ContainerState.RUNNING and body.get('healthChecks', []):
-      tasks_healthy, instances = body['tasksHealthy'], body['instances']
+      tasks_healthy, tasks_unhealthy = body['tasksHealthy'], body['tasksUnhealthy']
+      instances = body['instances']
       if tasks_healthy/instances < min_capacity:
-        state = ContainerState.FAILED
+        if tasks_healthy + tasks_unhealthy < instances:
+          state = ContainerState.PENDING
+        else:
+          state = ContainerState.FAILED
     # parse endpoints
     endpoints, racks, hosts = [], [], []
     if state == ContainerState.RUNNING:
