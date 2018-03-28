@@ -171,7 +171,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     if status != 200:
       self.logger.debug(err)
       return status, service, err
-    serv_info = Service.parse(resp, self.__cluster_mgr)
+    serv_info = await Service.parse(resp, self.__cluster_mgr)
     service.state, service.endpoints = serv_info['state'], serv_info['endpoints']
     service.rack, service.host = serv_info['rack'], serv_info['host']
     self.logger.debug('Updated service %s' % service)

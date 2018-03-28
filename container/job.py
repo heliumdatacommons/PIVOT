@@ -41,7 +41,7 @@ class Job(Container):
     return self.__start_time
 
   @classmethod
-  def parse(cls, body, cluster_mgr):
+  async def parse(cls, body, cluster_mgr):
     ### TO BE IMPORVED: currently the body is the output of the job summary due to
     ### limitations of Chronos API. With that being said, endpoints are not yet supported
     ### for jobs.

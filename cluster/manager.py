@@ -22,7 +22,7 @@ class ClusterManager(Loggable, metaclass=Singleton):
                           for h in c['hosts']])
 
   async def find_hosts_by_attribute(self, k, v):
-    cluster = self.get_cluster()
+    cluster = await self.get_cluster()
     return [h for h in cluster.hosts if h.attributes.get(k, None) == v]
 
   async def update_cluster(self, cluster):
