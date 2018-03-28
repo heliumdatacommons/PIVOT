@@ -152,9 +152,14 @@ class ApplianceMonitor(Loggable):
           self.logger.error(err)
     self.logger.info('Update DAG')
     for c in app.dag.get_free_containers():
-      _, c, err = await self.__contr_mgr.get_container(app.id, c.id)
+      status, c, err = await self.__contr_mgr.get_container(app.id, c.id)
       if err:
         self.logger.error(err)
+        if status == 404:
+          status, _, _ = await self.__app_mgr.get_appliance(app.id)
+          if status == 404:
+            self.logger.info("Appliance '%s' is already deleted, stop monitoring"%app.id)
+            self.stop(app.id)
         continue
       if (not app.dag.child_map.get(c.id, [])) \
           or (c.type == ContainerType.SERVICE and c.state == ContainerState.RUNNING) \

@@ -2,9 +2,11 @@
 
 import os
 import sys
+import time
 import json
 import toml
 import stat
+import socket
 import subprocess
 import multiprocessing
 
@@ -48,10 +50,21 @@ def create_pivot_config(dcos_master, pivot_port, pivot_n_parallel):
   json.dump(pivot_cfg, open(pivot_cfg_f, 'w'))
 
 
+def check_mongodb_port():
+  sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+  return sock.connect_ex(('127.0.0.1', 27017)) == 0
+
+
 def run_pivot():
   try:
     subprocess.run('/etc/init.d/mongodb start', shell=True, check=True,
                    stdout=sys.stdout, stderr=sys.stderr)
+    while not check_mongodb_port():
+      sys.stdout.write('Wait for MongoDB\n')
+      sys.stdout.flush()
+      time.sleep(3)
+    sys.stdout.write('MongoDB is ready\n')
+    sys.stdout.flush()
     subprocess.run('python3 /opt/pivot/server.py', shell=True, check=True,
                    stdout=sys.stdout, stderr=sys.stderr)
   except subprocess.CalledProcessError as e:
