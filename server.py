@@ -32,7 +32,7 @@ def start_server(config):
     (r'/appliance/([a-z0-9-]+\/*)/job',JobsHandler, dict(config=config)),
     (r'/appliance/([a-z0-9-]+\/*)/container/([a-z0-9-]+\/*)', ContainerHandler, dict(config=config)),
     (r'/ui/appliance/([a-z0-9-]+\/*)', ApplianceUIHandler),
-    (r'/static/(.*)', StaticFileHandler, dict(path='./static')),
+    (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
   ])
   server = tornado.httpserver.HTTPServer(app)
   server.bind(config.port)
