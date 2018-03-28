@@ -5,7 +5,7 @@ from datetime import timedelta
 from container.base import Container, ContainerType, ContainerState
 from container.service import Service
 from container.job import Job
-from cluster.base import Cluster
+from cluster.manager import ClusterManager
 from util import SecureAsyncHttpClient
 from util import Singleton, MotorClient, Loggable
 
@@ -18,7 +18,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     self.__config = config
     self.__contr_col = MotorClient().requester.container
     self.__http_cli = SecureAsyncHttpClient(config)
-    self.__cluster = Cluster(config)
+    self.__cluster_mgr = ClusterManager(config)
 
   async def get_container(self, app_id, contr_id):
     status, contr, err = await self._get_container_from_db(app_id, contr_id)
@@ -171,7 +171,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     if status != 200:
       self.logger.debug(err)
       return status, service, err
-    serv_info = Service.parse(resp, self.__cluster)
+    serv_info = Service.parse(resp, self.__cluster_mgr)
     service.state, service.endpoints = serv_info['state'], serv_info['endpoints']
     service.rack, service.host = serv_info['rack'], serv_info['host']
     self.logger.debug('Updated service %s' % service)
@@ -192,7 +192,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     if status != 200:
       self.logger.debug(err)
       return status, job, err
-    job_info = Job.parse(jobs[0], self.__cluster)
+    job_info = Job.parse(jobs[0], self.__cluster_mgr)
     job.state = job_info['state']
     return status, job, None
 

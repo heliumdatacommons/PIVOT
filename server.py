@@ -1,13 +1,15 @@
 import json
 import tornado
 
+from multiprocessing import Process
 from tornado.web import Application, StaticFileHandler
 
 from cluster.handler import ClusterInfoHandler
 from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
-from cluster.base import Cluster
+from cluster.manager import ClusterManager
+from util import dirname
 from util import Config, DCOSConfig, URLMap
 
 
@@ -20,10 +22,7 @@ def load_config(cfg_file_path):
   return Config(**cfg)
 
 
-def start_server():
-  config = load_config('config.json')
-  cluster = Cluster(config)
-  tornado.ioloop.IOLoop.instance().run_sync(cluster.monitor)
+def start_server(config):
   app = Application([
     (r'/cluster', ClusterInfoHandler, dict(config=config)),
     (r'/appliance', AppliancesHandler, dict(config=config)),
@@ -41,8 +40,18 @@ def start_server():
   tornado.ioloop.IOLoop.instance().start()
 
 
+def start_cluster_monitor(config):
+  tornado.ioloop.IOLoop.instance().run_sync(ClusterManager(config).monitor)
+
+
 if __name__ == '__main__':
-  start_server()
+  config = load_config('%s/config.json'%dirname(__file__))
+  p1 = Process(target=start_cluster_monitor, args=(config, ))
+  p2 = Process(target=start_server, args=(config, ))
+  p1.start()
+  p2.start()
+  p1.join()
+  p2.join()
 
 
 

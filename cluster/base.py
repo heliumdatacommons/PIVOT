@@ -1,16 +1,12 @@
 import bisect
 
-from collections import defaultdict
-from tornado.ioloop import PeriodicCallback
-
-from util import Singleton, Loggable, SecureAsyncHttpClient
-
 
 class Host:
 
   def __init__(self, hostname, resources, attributes={}):
     self.__resources = resources
-    self.__attributes = dict(**attributes, hostname=hostname)
+    self.__attributes = dict(**attributes)
+    self.__attributes.update(hostname=hostname)
 
   @property
   def hostname(self):
@@ -18,6 +14,9 @@ class Host:
 
   @property
   def resources(self):
+    """
+    :type: {cluster.base.Resources}
+    """
     return self.__resources
 
   @property
@@ -26,6 +25,9 @@ class Host:
 
   def to_render(self):
     return dict(attributes=self.attributes, resources=self.resources.to_render())
+
+  def to_save(self):
+    return self.to_render()
 
 
 class Resources:
@@ -70,44 +72,30 @@ class Resources:
     return dict(cpus=self.cpus, mem=self.mem, disk=self.disk, gpus=self.gpus,
                 port_ranges=['%d-%d'%p for p in self.port_ranges])
 
+  def to_save(self):
+    return self.to_render()
 
-class Cluster(Loggable, metaclass=Singleton):
 
-  MONITOR_INTERVAL = 30000 # query cluster info every minute
+class Cluster:
 
-  def __init__(self, config):
-    self.__config = config
-    self.__http_cli = SecureAsyncHttpClient(config)
-    self.__hosts = []
-    self.__attributes_map = defaultdict(set)
+  def __init__(self, id, hosts=[]):
+    self.__id = id
+    self.__hosts = hosts
+
+  @property
+  def id(self):
+    return self.__id
 
   @property
   def hosts(self):
     return list(self.__hosts)
 
-  def find_host_by_attribute(self, key, val):
-    return list(self.__attributes_map.get((key, val), []))
+  def to_render(self):
+    return dict(hosts=[h.to_render() for h in self.hosts])
 
-  async def monitor(self):
-    async def query_mesos():
-      status, body, err = await self.__http_cli.get('%s/slaves'%self.__config.url.mesos_master)
-      if status != 200:
-        self.logger.debug(err)
-        return
-      self.logger.debug('Collect host info')
-      self.__hosts = [Host(hostname=h['hostname'],
-                           resources=Resources(h['resources']['cpus'],
-                                               h['resources']['mem'],
-                                               h['resources']['disk'],
-                                               h['resources']['gpus'],
-                                               h['resources']['ports'][1:-1].split(',')),
-                           attributes=h['attributes'])
-                      for h in body['slaves']]
-      for h in self.__hosts:
-        for kv_pair in h.attributes.items():
-          self.__attributes_map[kv_pair].add(h)
+  def to_save(self):
+    return dict(id=self.id, hosts=[h.to_save() for h in self.hosts])
 
-    await query_mesos()
-    PeriodicCallback(query_mesos, self.MONITOR_INTERVAL).start()
+
 
 

@@ -1,3 +1,4 @@
+import os
 import re
 import sys
 import json
@@ -15,6 +16,10 @@ DCOSConfig = namedtuple('DCOSConfig', 'token_file_path master_url mesos_master_e
 URLMap = namedtuple('URLMap', 'mesos_master service_scheduler job_scheduler')
 
 
+def dirname(f):
+  return os.path.dirname(os.path.abspath(f))
+
+
 def message(msg):
   return dict(message=msg)
 
@@ -22,10 +27,12 @@ def message(msg):
 def error(msg):
   return dict(error=msg)
 
+
 def parse_container_short_id(p, appliance):
   return re.sub(r'(.*)\@([a-z0-9\.-]+)(.*)',
                 r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
                 str(p))
+
 
 class Singleton(type):
     _instances = {}
@@ -52,7 +59,7 @@ class Loggable(object):
     if not logger.handlers:
       stream_hdlr = logging.StreamHandler(sys.stdout)
       stream_hdlr.setFormatter(fmt)
-      file_hdlr = logging.FileHandler('pivot.log')
+      file_hdlr = logging.FileHandler('%s/log/pivot.log'%dirname(__file__))
       file_hdlr.setFormatter(fmt)
       logger.addHandler(stream_hdlr)
       logger.addHandler(file_hdlr)

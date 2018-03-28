@@ -99,7 +99,7 @@ class Service(Container):
     return self.__minimum_capacity
 
   @classmethod
-  def parse(cls, body, cluster):
+  def parse(cls, body, cluster_mgr):
     if isinstance(body, str):
       body = json.loads(body.decode('utf-8'))
     body = body['app']
@@ -118,7 +118,7 @@ class Service(Container):
     endpoints, rack, host = [], None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
-        host = cluster.find_host_by_attribute('hostname', t['host'])
+        host = cluster_mgr.find_host_by_attribute('hostname', t['host'])
         if not host: continue
         host, rack = host[0], host[0].attributes.get('rack', None)
         public_ip = host.attributes.get('public_ip', None)

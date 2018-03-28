@@ -7,5 +7,5 @@
     "token_file_path": "/Users/fanjiang/.dcos_token"
   },
   "port": 9090,
-  "n_parallel": 1
+  "n_parallel": 8
 }
