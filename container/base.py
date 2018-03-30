@@ -1,14 +1,24 @@
+import swagger
+
 from enum import Enum
 
 
+@swagger.enum
 class ContainerType(Enum):
+  """
+  "service" for long-running containers, "job" for one-off containers
+
+  """
 
   SERVICE = 'service'
   JOB = 'job'
 
 
+@swagger.enum
 class ContainerState(Enum):
-
+  """
+  Container state
+  """
   SUBMITTED = 'submitted'
   PENDING = 'pending'
   STAGING = 'staging'
@@ -42,7 +52,12 @@ class ContainerState(Enum):
     return ContainerState.FAILED
 
 
+@swagger.enum
 class NetworkMode(Enum):
+  """
+  Container network mode
+
+  """
 
   HOST = 'HOST'
   BRIDGE = 'BRIDGE'
@@ -53,7 +68,12 @@ class NetworkMode(Enum):
     return any(val == item.value for item in cls)
 
 
+@swagger.model
 class Volume:
+  """
+  Volume mounted to the container. Only support host local volumes currently
+
+  """
 
   def __init__(self, container_path, host_path, mode):
     self.__container_path = container_path
@@ -61,15 +81,45 @@ class Volume:
     self.__mode = mode
 
   @property
+  @swagger.property
   def container_path(self):
+    """
+    Volume mount point in the container
+    ---
+    type: str
+    required: true
+    example: /mnt/data
+
+    """
     return self.__container_path
 
   @property
+  @swagger.property
   def host_path(self):
+    """
+    Physical path of the volume on the host
+    ---
+    type: str
+    required: true
+    example: /home/user/data
+
+    """
     return self.__host_path
 
   @property
+  @swagger.property
   def mode(self):
+    """
+    Read-write mode
+    ---
+    type: str
+    required: true
+    example:
+      - R
+      - W
+      - RW
+
+    """
     return self.__mode
 
   def to_render(self):
@@ -86,7 +136,12 @@ class Volume:
                 mode=self.mode)
 
 
+@swagger.model
 class Endpoint:
+  """
+  Endpoint for accessing the container
+
+  """
 
   def __init__(self, host, container_port, host_port, protocol='tcp'):
     self.__host = host
@@ -95,19 +150,57 @@ class Endpoint:
     self.__protocol = protocol
 
   @property
+  @swagger.property
   def host(self):
+    """
+    Public IP address/hostname of the host where the container is running
+    ---
+    type: str
+    example: 192.168.1.1
+
+    """
     return self.__host
 
   @property
+  @swagger.property
   def host_port(self):
+    """
+    The port number on the host mapped to the container's listening port, which is used
+    for accessing the container
+    ---
+    type: int
+    maximum: 65535
+    minimum: 1
+    example: 18080
+
+    """
     return self.__host_port
 
   @property
+  @swagger.property
   def container_port(self):
+    """
+    The container's listening port
+    ---
+    type: int
+    maximum: 65535
+    minimum: 1
+    example: 8080
+
+    """
     return self.__container_port
 
   @property
+  @swagger.property
   def protocol(self):
+    """
+    The transport protocol for communication
+    ---
+    type: str
+    default: tcp
+    example: tcp
+
+    """
     return self.__protocol
 
   def to_render(self):
@@ -121,34 +214,65 @@ class Endpoint:
     return str(self.to_render())
 
 
+@swagger.model
 class Port:
+  """
+  Container port definition
 
-  def __init__(self, container_port, host_port=0, load_balanced_port=None,
-               protocol='tcp'):
+  """
+
+  def __init__(self, container_port, host_port=0, protocol='tcp'):
     self.__container_port = container_port
     self.__host_port = host_port
     self.__protocol = protocol
-    self.__load_balanced_port = load_balanced_port or container_port
 
   @property
+  @swagger.property
   def container_port(self):
+    """
+    Port number the container listens to
+    ---
+    type: int
+    required: true
+    maximum: 65535
+    minimum: 1
+    example: 8080
+
+    """
     return self.__container_port
 
   @property
+  @swagger.property
   def host_port(self):
+    """
+    Host port number the container listening port is mapped to. Random port number will be
+    assigned if set 0
+    ---
+    type: int
+    maximum: 65535
+    minimum: 0
+    example: 18080
+    default: 0
+
+    """
     return self.__host_port
 
   @property
+  @swagger.property
   def protocol(self):
-    return self.__protocol
+    """
+    The transport protocol for communication
+    ---
+    type: str
+    default: tcp
+    example: tcp
 
-  @property
-  def load_balanced_port(self):
-    return self.__load_balanced_port
+    """
+    return self.__protocol
 
   def to_render(self):
     return dict(container_port=self.container_port, host_port=self.host_port,
-                load_balanced_port=self.load_balanced_port, protocol=self.protocol)
+                protocol=self.protocol)
 
   def to_save(self):
     return self.to_render()
@@ -165,7 +289,12 @@ class Port:
     return str(self.to_render())
 
 
+@swagger.model
 class Resources:
+  """
+  Resources specifications
+
+  """
 
   def __init__(self, cpus, mem, disk=0, gpu=0):
     self.__cpus = cpus
@@ -174,19 +303,57 @@ class Resources:
     self.__gpu = gpu
 
   @property
+  @swagger.property
   def cpus(self):
+    """
+    Number of CPU cores
+    ---
+    type: int
+    required: true
+    minimum: 1
+    example: 1
+
+    """
     return self.__cpus
 
   @property
+  @swagger.property
   def mem(self):
+    """
+    Memory size in MB
+    ---
+    type: int
+    required: true
+    minimum: 128
+    example: 2048
+
+    """
     return self.__mem
 
   @property
+  @swagger.property
   def disk(self):
+    """
+    Disk size in MB
+    ---
+    type: int
+    default: 0
+    example: 10240
+
+    """
     return self.__disk
 
   @property
+  @swagger.property
   def gpu(self):
+    """
+    Number of GPU units
+    ---
+    type: int
+    default: 0
+    example: 1
+
+    """
     return self.__gpu
 
   def to_render(self):
@@ -200,7 +367,12 @@ class Resources:
     return self.to_render()
 
 
+@swagger.model
 class Container:
+  """
+  Container specifications
+
+  """
 
   REQUIRED=frozenset(['id', 'type', 'image', 'resources'])
 
@@ -241,75 +413,249 @@ class Container:
     return 200, "Container %s is valid"%data['id'], None
 
   @property
+  @swagger.property
   def id(self):
+    """
+    Unique identifier of the container in an appliance
+    ---
+    type: str
+    required: true
+    example: test-container
+
+    """
     return self.__id
 
   @property
+  @swagger.property
   def appliance(self):
+    """
+    The appliance in which the container is running
+    ---
+    type: str
+    example: test-app
+    read_only: true
+
+    """
     return self.__appliance
 
   @property
+  @swagger.property
   def type(self):
+    """
+    Container type
+    ---
+    type: ContainerType
+    required: true
+    example: service
+
+    """
     return self.__type
 
   @property
+  @swagger.property
   def image(self):
+    """
+    Container image ID. The image is either locally available in the cluster or publicly
+    hosted on Docker Hub
+    ---
+    type: str
+    required: true
+    example: centos:7
+
+    """
     return self.__image
 
   @property
+  @swagger.property
   def resources(self):
+    """
+    Resources allocated to the container
+    ---
+    type: Resources
+    required: true
+    example: Resources
+
+    """
     return self.__resources
 
   @property
+  @swagger.property
   def cmd(self):
+    """
+    Command to be run on the container. Mutually exclusive to `args` property
+    ---
+    type: str
+    nullable: true
+    example: /bin/bash
+
+    """
     return self.__cmd
 
   @property
+  @swagger.property
   def args(self):
+    """
+    A list of arguments for running the container. Mutually exclusive to `cmd` property
+    ---
+    type: list
+    items: str
+    default: []
+    example:
+      - --data_dir
+      - /home/user/data
+    """
     return list(self.__args)
 
   @property
+  @swagger.property
   def env(self):
+    """
+    Environment variables set within the container
+    ---
+    type: object
+    additional_properties:
+      type: str
+    default: {}
+    example:
+      DATA_DIR: /home/user/data
+    """
     return dict(self.__env)
 
   @property
+  @swagger.property
   def volumes(self):
+    """
+    Volumes to be mounted to the container
+    ---
+    type: list
+    items: Volume
+    default: []
+
+    """
     return list(self.__volumes)
 
   @property
+  @swagger.property
   def network_mode(self):
+    """
+    Network mode of the container
+    ---
+    type: NetworkMode
+    required: true
+    default: host
+    example: container
+
+    """
     return self.__network_mode
 
   @property
+  @swagger.property
   def endpoints(self):
+    """
+    Endpoints for accessing the container
+    ---
+    type: list
+    items: Endpoint
+    default: []
+    read_only: true
+
+    """
     return list(self.__endpoints)
 
   @property
+  @swagger.property
   def ports(self):
+    """
+    Port definitions of the container
+    ---
+    type: list
+    items: Port
+    default: []
+
+    """
     return list(self.__ports)
 
   @property
+  @swagger.property
   def state(self):
+    """
+    Container state
+    ---
+    type: ContainerState
+    read_only: true
+
+    """
     return self.__state
 
   @property
+  @swagger.property
   def rack(self):
+    """
+    Placement constraint: the specific rack the container must be placed on
+    ---
+    type: str
+    nullable: true
+    example: 'aws'
+
+    """
     return self.__rack
 
   @property
+  @swagger.property
   def host(self):
+    """
+    Placement constraint: the specific host (identified by the host's private IP address)
+    the container must be placed on
+    ---
+    type: str
+    nullable: true
+    example: 10.52.0.3
+
+    """
     return self.__host
 
   @property
+  @swagger.property
   def is_privileged(self):
+    """
+    Whether to run the container in `privileged` mode
+    ---
+    type: bool
+    required: true
+    default: false
+    example: false
+
+    """
     return self.__is_privileged
 
   @property
+  @swagger.property
   def force_pull_image(self):
+    """
+    Whether to pull the latest container image from the image repository (e.g., Docker
+    Hub) when launching the container
+    ---
+    type: bool
+    required: true
+    default: true
+    example: true
+
+    """
     return self.__force_pull_image
 
   @property
+  @swagger.property
   def dependencies(self):
+    """
+    Other containers in the appliance that the container depends on
+    ---
+    type: list
+    items: str
+    default: []
+    example:
+      - c1
+      - j2
+    """
     return list(self.__dependencies)
 
   @property

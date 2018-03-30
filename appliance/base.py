@@ -1,8 +1,16 @@
+import swagger
+
 from collections import defaultdict
+
 from container.base import Container
 
 
+@swagger.model
 class Appliance:
+  """
+  PIVOT appliance
+
+  """
 
   REQUIRED = frozenset(['id', 'containers'])
 
@@ -25,15 +33,40 @@ class Appliance:
     return 200, "Appliance %s is valid" % data['id'], None
 
   @property
+  @swagger.property
   def id(self):
+    """
+    Appliance ID
+
+    ---
+    type: str
+    required: true
+    example: test_app
+
+    """
     return self.__id
 
   @property
+  @swagger.property
   def containers(self):
+    """
+    Containers in the appliance
+
+    ---
+    type: list
+    items: Container
+    required: true
+
+    """
     return self.__containers
 
   @property
   def dag(self):
+    """
+    DAG for tracking container dependencies
+
+    :rtype: `ContainerDAG`
+    """
     return self.__dag
 
   @containers.setter

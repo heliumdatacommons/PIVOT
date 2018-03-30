@@ -1,5 +1,6 @@
 import json
 import tornado
+import swagger
 
 from tornado.web import RequestHandler
 
@@ -16,6 +17,7 @@ class AppliancesHandler(RequestHandler, Loggable):
     self.__app_mgr = ApplianceManager(config)
     self.__contr_mgr = ContainerManager(config)
 
+  @swagger.operation
   async def post(self):
     try:
       data = tornado.escape.json_decode(self.request.body)
@@ -38,11 +40,13 @@ class ApplianceHandler(RequestHandler, Loggable):
     self.__app_mgr = ApplianceManager(config)
     self.__contr_mgr = ContainerManager(config)
 
+  @swagger.operation
   async def get(self, app_id):
     status, app, err = await self.__app_mgr.get_appliance(app_id)
     self.set_status(status)
     self.write(json.dumps(app.to_render() if status == 200 else error(err)))
 
+  @swagger.operation
   async def delete(self, app_id):
     status, msg, err = await self.__app_mgr.delete_appliance(app_id)
     self.set_status(status)

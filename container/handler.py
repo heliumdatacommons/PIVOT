@@ -1,4 +1,5 @@
 import json
+import swagger
 
 from tornado.web import RequestHandler
 
@@ -12,6 +13,7 @@ class ServicesHandler(RequestHandler, Loggable):
   def initialize(self, config):
     self.__contr_mgr = ContainerManager(config)
 
+  @swagger.operation
   async def get(self, app_id):
     status, services, err = await self.__contr_mgr.get_containers(app_id, type='service')
     self.set_status(status)
@@ -24,6 +26,7 @@ class JobsHandler(RequestHandler, Loggable):
   def initialize(self, config):
     self.__contr_mgr = ContainerManager(config)
 
+  @swagger.operation
   async def get(self, app_id):
     status, services, err = await self.__contr_mgr.get_containers(app_id, type='job')
     self.set_status(status)
@@ -42,11 +45,13 @@ class ContainerHandler(RequestHandler, Loggable):
   def initialize(self, config):
     self.__contr_mgr = ContainerManager(config)
 
+  @swagger.operation
   async def get(self, app_id, contr_id):
     status, contr, err = await self.__contr_mgr.get_container(app_id, contr_id)
     self.set_status(status)
     self.write(json.dumps(contr.to_render() if status == 200 else error(err)))
 
+  @swagger.operation
   async def delete(self, app_id, contr_id):
     status, msg, err = await self.__contr_mgr.delete_container(app_id, contr_id)
     self.set_status(status)

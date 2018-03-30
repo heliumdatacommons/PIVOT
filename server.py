@@ -9,6 +9,7 @@ from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
 from cluster.manager import ClusterManager
+from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
 from util import dirname
 from util import Config, DCOSConfig, URLMap
 
@@ -31,8 +32,10 @@ def start_server(config):
     (r'/appliance/([a-z0-9-]+\/*)/service',ServicesHandler, dict(config=config)),
     (r'/appliance/([a-z0-9-]+\/*)/job',JobsHandler, dict(config=config)),
     (r'/appliance/([a-z0-9-]+\/*)/container/([a-z0-9-]+\/*)', ContainerHandler, dict(config=config)),
-    (r'/ui/appliance/([a-z0-9-]+\/*)', ApplianceUIHandler),
+    (r'/appliance/([a-z0-9-]+\/*)/ui', ApplianceUIHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
+    (r'/api', SwaggerAPIHandler),
+    (r'/api/ui', SwaggerUIHandler),
   ])
   server = tornado.httpserver.HTTPServer(app)
   server.bind(config.port)
