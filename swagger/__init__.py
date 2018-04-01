@@ -51,6 +51,9 @@ def _format_docstring(docstring):
     return docstring
   return docstring.strip().replace('\n', ' ')
 
+def _get_class_name(cls):
+  return cls.__name__.split('.')[-1]
+
 
 class enum:
 
@@ -150,7 +153,8 @@ class SwaggerAPIRegistry(Loggable, metaclass=Singleton):
   def _parse_models(self):
     models = {}
     for m_cls in self.__models:
-      model = Model(m_cls.__name__, description=_format_docstring(m_cls.__doc__))
+      model = Model(m_cls.__name__, type=_get_class_name(m_cls.__bases__[0]),
+                    description=_format_docstring(m_cls.__doc__))
       for p in self.__properties.get(model.name, []):
         property = Property(p.__name__)
         if p.__doc__:

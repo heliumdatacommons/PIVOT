@@ -1,4 +1,6 @@
 import swagger
+import datetime
+
 
 class Enum:
 
@@ -45,16 +47,16 @@ class Model:
     self.__properties.append(p)
 
   def to_dict(self):
-    res = dict()
+    res = dict(type='object')
     if self.__description:
       res.update(description=self.description)
-    if self.__type:
-      res.update(type=self.__type)
     if self.__ref:
       res.update(ref=self.__ref)
     if self.__properties:
       res.update(required=[p.name for p in self.__properties if p.required],
                  properties={p.name: p.to_dict() for p in self.__properties})
+    if self.type != 'object':
+      res = {'allOf': [{'$ref': '#/components/schemas/%s'%self.type}, res]}
     return res
 
 
@@ -124,7 +126,9 @@ class Property:
     if self.__write_only:
       res.update(writeOnly=self.__write_only)
     if self.__example:
-      res.update(example=self.__example)
+      res.update(example=self.__example.strftime("%Y-%m-%d %H:%M:%S")
+                         if isinstance(self.__example, datetime.datetime)
+                         else self.__example)
     if self.__maximum is not None:
       res.update(maximum=self.__maximum)
     if self.__minimum is not None:

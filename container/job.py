@@ -1,3 +1,5 @@
+import swagger
+
 from util import parse_container_short_id
 from container.base import Container, NetworkMode, ContainerState
 
@@ -10,7 +12,13 @@ from container.base import Container, NetworkMode, ContainerState
 # 3. Cannot specify "resource role": as a consequence, jobs cannot be run on
 #                                    "slave_public" hosts.
 
+
+@swagger.model
 class Job(Container):
+  """
+  PIVOT Job
+
+  """
 
   def __init__(self, resources, network_mode=NetworkMode.HOST,
                retries=1, repeats=1, start_time='', interval='2M', **kwargs):
@@ -25,19 +33,54 @@ class Job(Container):
     self.__interval = interval
 
   @property
+  @swagger.property
   def interval(self):
+    """
+    Interval between repetitions of the job
+    ---
+    type: str
+    default: 2M
+    example: 2M
+    """
     return self.__interval
 
   @property
+  @swagger.property
   def retries(self):
+    """
+    Maximum number of retries of the job if failed
+    ---
+    type: int
+    default: 1
+    example: 1
+
+    """
     return self.__retries
 
   @property
+  @swagger.property
   def repeats(self):
+    """
+    Number of repetitons of the job
+    ---
+    type: int
+    default: 1
+    example: 1
+
+    """
     return self.__repeats
 
   @property
+  @swagger.property
   def start_time(self):
+    """
+    Scheduled time to start the job. The job is started immediately if this field is left
+    blank.
+    ---
+    type: datetime
+    default: ''
+    example: 2018-04-01T17:22:00Z
+    """
     return self.__start_time
 
   @classmethod
