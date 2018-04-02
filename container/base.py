@@ -115,8 +115,6 @@ class Volume:
     type: str
     required: true
     example:
-      - R
-      - W
       - RW
 
     """

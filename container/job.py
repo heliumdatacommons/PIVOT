@@ -48,7 +48,7 @@ class Job(Container):
   @swagger.property
   def retries(self):
     """
-    Maximum number of retries of the job if failed
+    Maximum number of retries of the job on failures
     ---
     type: int
     default: 1
@@ -77,7 +77,7 @@ class Job(Container):
     Scheduled time to start the job. The job is started immediately if this field is left
     blank.
     ---
-    type: datetime
+    type: datetime.datetime
     default: ''
     example: 2018-04-01T17:22:00Z
     """

@@ -14,6 +14,7 @@ class SwaggerAPIHandler(RequestHandler):
 
   def initialize(self):
     self.__api_reg = SwaggerAPIRegistry()
+    self.__api_reg.register_operations(self.application)
 
   async def get(self):
     self.write(json.dumps(self.__api_reg.get_api_specs()))
