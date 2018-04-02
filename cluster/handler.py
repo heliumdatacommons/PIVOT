@@ -12,6 +12,19 @@ class ClusterInfoHandler(RequestHandler, Loggable):
   def initialize(self, config):
     self.__cluster_mgr = ClusterManager(config)
 
+  @swagger.operation
   async def get(self):
-    cluster = await self.__cluster_mgr.get_cluster()
-    self.write(json.dumps(cluster.to_render()))
+    """
+    Get cluster updates
+    ---
+    responses:
+      200:
+        description: Updates on hosts in the cluster
+        content:
+          application/json:
+            schema:
+              type: list
+              items: Host
+    """
+    hosts = await self.__cluster_mgr.get_cluster()
+    self.write(json.dumps([h.to_render() for h in hosts]))

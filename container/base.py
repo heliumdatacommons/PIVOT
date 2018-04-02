@@ -114,8 +114,7 @@ class Volume:
     ---
     type: str
     required: true
-    example:
-      - RW
+    example: RW
 
     """
     return self.__mode

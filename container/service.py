@@ -309,13 +309,11 @@ class Service(Container):
       r['networks'] = [dict(mode='container', name='dcos')]
     # set port definitions
     if self.network_mode == NetworkMode.HOST:
-      r['portDefinitions'] = [dict(protocol=p.protocol, port=p.container_port,
-                                   labels={"VIP_%d"%i: "/:%d"%p.load_balanced_port})
+      r['portDefinitions'] = [dict(protocol=p.protocol, port=p.container_port)
                               for i, p in enumerate(self.ports)]
     else:
       port_mappings = [dict(protocol=p.protocol, hostPort=p.host_port,
-                            containerPort=p.container_port,
-                            labels={"VIP_%d"%i: "/:%d"%p.load_balanced_port})
+                            containerPort=p.container_port)
                        for i, p in enumerate(self.ports)]
       r['container']['docker']['portMappings'] = port_mappings
     if self.rack:

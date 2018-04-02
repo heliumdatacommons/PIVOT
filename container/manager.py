@@ -192,7 +192,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     if status != 200:
       self.logger.debug(err)
       return status, job, err
-    job_info = Job.parse(jobs[0], self.__cluster_mgr)
+    job_info = await Job.parse(jobs[0], self.__cluster_mgr)
     job.state = job_info['state']
     return status, job, None
 
