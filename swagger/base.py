@@ -57,7 +57,7 @@ class Operation:
 
   def to_dict(self):
     op = dict(tags=[self.__tag],
-              parameters={p.name: p.to_dict() for p in self.__params},
+              parameters=[p.to_dict() for p in self.__params],
               responses={r.code: r.to_dict() for r in self.__responses})
     if self.__request_body:
       op.update(requestBody=self.__request_body.to_dict())
@@ -95,7 +95,8 @@ class Parameter:
     self.__in = show_in
 
   def to_dict(self):
-    res = {'in': self.__in, 'schema': swagger._convert_data_type(self.__type)}
+    res = {'name': self.__name, 'in': self.__in,
+           'schema': swagger._convert_data_type(self.__type)}
     if self.__required:
       res.update(required=self.__required)
     if self.__description:
