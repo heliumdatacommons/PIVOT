@@ -14,12 +14,14 @@ class ClusterManager(Loggable, metaclass=Singleton):
     self.__http_cli = SecureAsyncHttpClient(config)
 
   async def get_cluster(self):
-    return [Host(hostname=h['attributes']['hostname'],
-                 resources=HostResources(**h['resources']),
-                 attributes=h['attributes']) async for h in self.__host_col.find()]
+    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
+            async for h in self.__host_col.find()]
 
-  async def find_hosts_by_attribute(self, k, v):
-    return [Host(**h) async for h in self.__host_col.find({k: v})]
+  async def find_hosts_by_attributes(self, **kwargs):
+    cond = {'attributes.%s'%k: {'$in': v} if isinstance(v, list) else v
+            for k, v in kwargs.items()}
+    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
+            async for h in self.__host_col.find(cond)]
 
   async def update_hosts(self, hosts):
     for h in hosts:

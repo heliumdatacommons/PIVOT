@@ -239,7 +239,7 @@ class Service(Container):
     endpoints, rack, host = [], None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
-        hosts = await cluster_mgr.find_hosts_by_attribute('hostname', t['host'])
+        hosts = await cluster_mgr.find_hosts_by_attributes(hostname=t['host'])
         if not hosts: continue
         host, rack = hosts[0], hosts[0].attributes.get('rack', None)
         public_ip = host.attributes.get('public_ip', None)
