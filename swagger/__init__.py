@@ -22,7 +22,8 @@ DATA_TYPES = {
   datetime.datetime: dict(type='string', format='date-time'),
   list: dict(type='array'),
   tuple: dict(type='array'),
-  set: dict(type='array')
+  set: dict(type='array'),
+  object: dict(type='object')
 }
 
 
@@ -169,11 +170,14 @@ class SwaggerAPIRegistry(Loggable, metaclass=Singleton):
             op.request_body = RequestBody(Content(request_body['content']))
           for p in in_path_params:
             op.add_parameter(p)
-          for name, p in method_specs.get('parameters', {}).items():
-            op.add_parameter(Parameter(name=name, **p))
+          for p in method_specs.get('parameters', []):
+            op.add_parameter(Parameter(**p, show_in=p.pop('in', None)))
           for code, r in method_specs.get('responses', {}).items():
-            op.add_response(Response(code=code, description=r.get('description', ''),
-                                     content=Content(r['content'])))
+            resp = Response(code=code, description=r.get('description', ''))
+            content = r.get('content', None)
+            if content:
+              resp.content = Content(content)
+            op.add_response(resp)
         path.add_operation(op)
       paths.append(path)
     return {p.path: p.to_dict() for p in paths}

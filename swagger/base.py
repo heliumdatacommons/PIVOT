@@ -37,13 +37,13 @@ class Operation:
   def summary(self):
     return self.__summary
 
-  @summary.setter
-  def summary(self, summary):
-    self.__summary = summary
-
   @property
   def request_body(self):
     return self.__request_body
+
+  @summary.setter
+  def summary(self, summary):
+    self.__summary = summary
 
   @request_body.setter
   def request_body(self, request_body):
@@ -75,11 +75,13 @@ class RequestBody:
 
 class Parameter:
 
-  def __init__(self, name, type, show_in, description='', required=False):
+  def __init__(self, name, type, show_in, description='', items=None, required=False,
+               *args, **kwargs):
     self.__name = name
     self.__type = type
     self.__in = show_in
     self.__description = description
+    self.__items = items
     self.__required = required
 
   @property
@@ -101,12 +103,14 @@ class Parameter:
       res.update(required=self.__required)
     if self.__description:
       res.update(description=self.__description)
+    if self.__items:
+      res.update(items=swagger._convert_data_type(self.__items))
     return res
 
 
 class Response:
 
-  def __init__(self, code, content, description=''):
+  def __init__(self, code, content=None, description=''):
     self.__code = code
     self.__content = content
     self.__description = description
@@ -115,8 +119,19 @@ class Response:
   def code(self):
     return self.__code
 
+  @property
+  def content(self):
+    return self.__content
+
+  @content.setter
+  def content(self, content):
+    self.__content = content
+
+
   def to_dict(self):
-    resp = dict(content=self.__content.to_dict())
+    resp = {}
+    if self.__content:
+      resp.update(content=self.__content.to_dict())
     if self.__description:
       resp.update(description=self.__description)
     return resp
