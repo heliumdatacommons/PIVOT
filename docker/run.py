@@ -68,7 +68,7 @@ def run_pivot():
     subprocess.run('python3 /opt/pivot/server.py', shell=True, check=True,
                    stdout=sys.stdout, stderr=sys.stderr)
   except subprocess.CalledProcessError as e:
-    sys.exis(e.returncode)
+    sys.exit(e.returncode)
 
 
 if __name__ == '__main__':

@@ -7,7 +7,7 @@ from swagger import SwaggerAPIRegistry
 class SwaggerUIHandler(RequestHandler):
 
   async def get(self):
-    self.render('index.html', url='/api')
+    self.render('index.html')
 
 
 class SwaggerAPIHandler(RequestHandler):
