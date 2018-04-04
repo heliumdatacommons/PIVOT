@@ -19,12 +19,13 @@ class ClusterInfoHandler(RequestHandler, Loggable):
     ---
     parameters:
       - name: hostname
-        description: hostname of the physical host
+        description: Hostname of the physical host
         in: query
         type: list
         items: str
         example: 10.52.0.107
       - name: public_ip
+        description: Public IP address of the physical host
         in: query
         type: list
         items: str

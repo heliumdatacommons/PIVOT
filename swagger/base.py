@@ -59,6 +59,8 @@ class Operation:
     op = dict(tags=[self.__tag],
               parameters=[p.to_dict() for p in self.__params],
               responses={r.code: r.to_dict() for r in self.__responses})
+    if self.__summary:
+      op.update(summary=self.__summary)
     if self.__request_body:
       op.update(requestBody=self.__request_body.to_dict())
     return op

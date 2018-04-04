@@ -9,6 +9,7 @@ from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
 from cluster.manager import ClusterManager
+from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
 from util import dirname
 from util import Config, DCOSConfig, URLMap
@@ -25,6 +26,7 @@ def load_config(cfg_file_path):
 
 def start_server(config):
   app = Application([
+    (r'/ping', PingHandler),
     (r'/cluster', ClusterInfoHandler, dict(config=config)),
     (r'/appliance', AppliancesHandler, dict(config=config)),
     (r'/appliance/([a-z0-9-]+\/*)', ApplianceHandler, dict(config=config)),
