@@ -1,0 +1,10 @@
+---
+dcos:
+  master_url: http://129.114.109.10
+  mesos_master_endpoint: mesos/master
+  service_scheduler_endpoint: service/marathon/v2
+  job_scheduler_endpoint: service/chronos/v1/scheduler
+  token_file_path: /Users/fanjiang/.dcos_token
+port: 9090
+n_parallel: 8
+

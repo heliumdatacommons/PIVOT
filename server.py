@@ -1,4 +1,4 @@
-import json
+import yaml
 import tornado
 
 from multiprocessing import Process
@@ -16,8 +16,7 @@ from util import Config, DCOSConfig, URLMap
 
 
 def load_config(cfg_file_path):
-  cfg = json.load(open(cfg_file_path))
-
+  cfg = yaml.load(open(cfg_file_path))
   cfg['url'] = URLMap(**{k: '%s/%s'%(cfg['dcos']['master_url'], cfg['dcos']['%s_endpoint'%k])
                          for k in ['service_scheduler', 'job_scheduler', 'mesos_master']})
   cfg['dcos'] = DCOSConfig(**cfg['dcos'])
@@ -50,7 +49,7 @@ def start_cluster_monitor(config):
 
 
 if __name__ == '__main__':
-  config = load_config('%s/config.json'%dirname(__file__))
+  config = load_config('%s/config.yml'%dirname(__file__))
   p1 = Process(target=start_cluster_monitor, args=(config, ))
   p2 = Process(target=start_server, args=(config, ))
   p1.start()
