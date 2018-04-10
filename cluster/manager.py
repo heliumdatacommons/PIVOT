@@ -29,11 +29,27 @@ class ClusterManager(Loggable, metaclass=Singleton):
                                         upsert=True)
 
   async def monitor(self):
+
+    async def get_updated_master():
+      marathon_api, mesos_api = self.__config.marathon, self.__config.mesos
+      status, body, err = await self.__http_cli.get(marathon_api.host, marathon_api.port,
+                                                    '%s/leader'%marathon_api.endpoint)
+      if status != 200:
+        self.logger.error(err)
+        raise Exception('Failed to get leader master')
+      host, port = body.get('leader', ':').split(':')
+      if host != mesos_api.host:
+        mesos_api.host = host
+        marathon_api.host, marathon_api.port = host, port
+        self.logger.info('Current leader: %s:%d'%(mesos_api.host, mesos_api.port))
+
     async def query_mesos():
+      await get_updated_master()
       api = self.__config.mesos
       status, body, err = await self.__http_cli.get(api.host, api.port,
                                                     '%s/master/slaves'%api.endpoint)
       if status != 200:
+        print(status, body)
         self.logger.debug(err)
         return
       self.logger.debug('Collect host info')

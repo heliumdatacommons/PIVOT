@@ -4,7 +4,6 @@ import sys
 import json
 import motor
 import logging
-import subprocess
 
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 
@@ -92,4 +91,6 @@ class AsyncHttpClientWrapper(Loggable):
     except json.JSONDecodeError as de:
       return 422, None, error(de.msg)
     except HTTPError as e:
-      return e.response.code, None, error(e.response.body.decode('utf-8'))
+      if e.code == 599:
+        return e.code, None, e.message
+      return e.code, None, error(e.response.body.decode('utf-8'))
