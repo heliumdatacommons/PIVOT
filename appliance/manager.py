@@ -3,7 +3,7 @@ import functools
 
 from tornado.ioloop import PeriodicCallback
 
-from util import Singleton, Loggable, MotorClient, SecureAsyncHttpClient
+from util import Singleton, Loggable, MotorClient, AsyncHttpClientWrapper
 from appliance.base import Appliance
 from container.base import ContainerType, ContainerState
 from container.manager import ContainerManager
@@ -13,7 +13,7 @@ class ApplianceManager(Loggable, metaclass=Singleton):
 
   def __init__(self, config):
     self.__config = config
-    self.__http_cli = SecureAsyncHttpClient(config)
+    self.__http_cli = AsyncHttpClientWrapper()
     self.__app_col = MotorClient().requester.appliance
     self.__contr_col = MotorClient().requester.container
     self.__contr_mgr = ContainerManager(config)
@@ -92,8 +92,9 @@ class ApplianceManager(Loggable, metaclass=Singleton):
     return 200, "Appliance '%s' has been deleted"%app_id, None
 
   async def _deprovision_group(self, app_id):
-    url = '%s/groups/%s?force=true'%(self.__config.url.service_scheduler, app_id)
-    status, msg, err = await self.__http_cli.delete(url)
+    api = self.__config.marathon
+    endpoint = '%s/groups/%s?force=true'%(api.endpoint, app_id)
+    status, msg, err = await self.__http_cli.delete(api.host, api.port, endpoint)
     if err:
       return status, None, err
     return 200, "Services of appliance '%s' have been deprovisioned"%app_id, None

@@ -6,7 +6,7 @@ from container.base import Container, ContainerType, ContainerState
 from container.service import Service
 from container.job import Job
 from cluster.manager import ClusterManager
-from util import SecureAsyncHttpClient
+from util import AsyncHttpClientWrapper
 from util import Singleton, MotorClient, Loggable
 
 
@@ -17,7 +17,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
   def __init__(self, config):
     self.__config = config
     self.__contr_col = MotorClient().requester.container
-    self.__http_cli = SecureAsyncHttpClient(config)
+    self.__http_cli = AsyncHttpClientWrapper()
     self.__cluster_mgr = ClusterManager(config)
 
   async def get_container(self, app_id, contr_id):
@@ -164,8 +164,9 @@ class ContainerManager(Loggable, metaclass=Singleton):
     return status, contr, err
 
   async def _get_updated_service(self, service):
-    url = '%s/apps%s'%(self.__config.url.service_scheduler, service)
-    status, resp, err = await self.__http_cli.get(url)
+    api = self.__config.marathon
+    endpoint = '%s/apps%s'%(api.endpoint, service)
+    status, resp, err = await self.__http_cli.get(api.host, api.port, endpoint)
     if status == 404:
       return status, service, "Service '%s' is not found"%service
     if status != 200:
@@ -184,8 +185,9 @@ class ContainerManager(Loggable, metaclass=Singleton):
     :param contr:
     :return:
     """
-    url = '%s/jobs/summary'%self.__config.url.job_scheduler
-    status, body, err = await self.__http_cli.get(url)
+    api = self.__config.chronos
+    endpoint = '%s/jobs/summary'%api.endpoint
+    status, body, err = await self.__http_cli.get(api.host, api.port, endpoint)
     jobs = [j for j in body['jobs'] if j['name'] == str(job)]
     if not jobs:
       return 404, job, "Job '%s' is not found"%job
@@ -197,20 +199,28 @@ class ContainerManager(Loggable, metaclass=Singleton):
     return status, job, None
 
   async def _provision_service(self, service):
-    url = '%s/apps?force=true'%self.__config.url.service_scheduler
+    api = self.__config.marathon
+    endpoint = '%s/apps?force=true'%api.endpoint
     body = dict(service.to_request())
-    return await self.__http_cli.post(url, body)
+    return await self.__http_cli.post(api.host, api.port, endpoint, body)
 
   async def _delete_service(self, contr):
-    return await self.__http_cli.delete('%s/apps%s?force=true'%(self.__config.url.service_scheduler, contr))
+    api = self.__config.marathon
+    endpoint = '%s/apps%s?force=true'%(api.endpoint, contr)
+    return await self.__http_cli.delete(api.host, api.port, endpoint)
 
   async def _provision_job(self, job):
-    return await self.__http_cli.post('%s/iso8601'%self.__config.url.job_scheduler, job.to_request())
+    api = self.__config.chronos
+    endpoint = '%s/iso8601'%api.endpoint
+    body = dict(job.to_request())
+    return await self.__http_cli.post(api.host, api.port, endpoint, body)
 
   async def _kill_job_tasks(self, contr):
-    return await self.__http_cli.delete('%s/task/kill/%s'%(self.__config.url.job_scheduler, contr))
+    api = self.__config.chronos
+    endpoint = '%s/task/kill/%s'%(api.endpoint, contr)
+    return await self.__http_cli.delete(api.host, api.port, endpoint)
 
   async def _delete_job(self, contr):
-    return await self.__http_cli.delete('%s/job/%s'%(self.__config.url.job_scheduler, contr))
-
-
+    api = self.__config.chronos
+    endpoint = '%s/job/%s'%(api.endpoint, contr)
+    return await self.__http_cli.delete(api.host, api.port, endpoint)

@@ -23,13 +23,6 @@ RUN mkdir -p /data/db \
 COPY . /opt/pivot
 RUN pip install -r /opt/pivot/requirement.txt
 
-# install DC/OS client
-RUN [ -d /usr/local/bin ] || sudo mkdir -p /usr/local/bin \
-    && curl https://downloads.dcos.io/binaries/cli/linux/x86-64/dcos-1.11/dcos -o dcos \
-    && mv dcos /usr/local/bin \
-    && chmod +x /usr/local/bin/dcos \
-    && mkdir -p $HOME/.dcos
-
 # Copy launch script
 COPY ./docker/run.py /usr/local/bin/run.py
 RUN chmod +x /usr/local/bin/run.py

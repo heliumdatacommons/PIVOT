@@ -1,7 +1,7 @@
 from tornado.ioloop import PeriodicCallback
 
 from cluster.base import Host, HostResources
-from util import Singleton, MotorClient, Loggable, SecureAsyncHttpClient
+from util import Singleton, MotorClient, Loggable, AsyncHttpClientWrapper
 
 
 class ClusterManager(Loggable, metaclass=Singleton):
@@ -11,7 +11,7 @@ class ClusterManager(Loggable, metaclass=Singleton):
   def __init__(self, config):
     self.__config = config
     self.__host_col = MotorClient().requester.host
-    self.__http_cli = SecureAsyncHttpClient(config)
+    self.__http_cli = AsyncHttpClientWrapper()
 
   async def get_cluster(self):
     return [Host(**h, resources=HostResources(**h.pop('resources', None)))
@@ -30,8 +30,9 @@ class ClusterManager(Loggable, metaclass=Singleton):
 
   async def monitor(self):
     async def query_mesos():
-      mesos_master = self.__config.url.mesos_master
-      status, body, err = await self.__http_cli.get('%s/slaves'%mesos_master)
+      api = self.__config.mesos
+      status, body, err = await self.__http_cli.get(api.host, api.port,
+                                                    '%s/master/slaves'%api.endpoint)
       if status != 200:
         self.logger.debug(err)
         return

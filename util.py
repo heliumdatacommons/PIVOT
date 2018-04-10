@@ -6,14 +6,7 @@ import motor
 import logging
 import subprocess
 
-from collections import namedtuple
 from tornado.httpclient import AsyncHTTPClient, HTTPError
-
-
-Config = namedtuple('Config', 'dcos port n_parallel url')
-DCOSConfig = namedtuple('DCOSConfig', 'token_file_path master_url mesos_master_endpoint '
-                                      'service_scheduler_endpoint job_scheduler_endpoint')
-URLMap = namedtuple('URLMap', 'mesos_master service_scheduler job_scheduler')
 
 
 def dirname(f):
@@ -66,33 +59,31 @@ class Loggable(object):
     return logger
 
 
-class SecureAsyncHttpClient(Loggable):
+class AsyncHttpClientWrapper(Loggable):
 
-  def __init__(self, config):
-    self.__config = config
+  def __init__(self):
     self.__cli = AsyncHTTPClient()
-    self.__headers = {
-      'Content-Type': 'application/json',
-      'Authorization': 'token=%s'%self._get_auth_token()
-    }
+    self.__headers = {'Content-Type': 'application/json'}
 
-  async def get(self, url, **headers):
-    return await self._fetch(url, 'GET', None, **headers)
+  async def get(self, host, port, endpoint, is_https=False, **headers):
+    return await self._fetch(host, port, endpoint, 'GET', None, is_https, **headers)
 
-  async def post(self, url, body, **headers):
-    return await self._fetch(url, 'POST', body, **headers)
+  async def post(self, host, port, endpoint, body, is_https=False, **headers):
+    return await self._fetch(host, port, endpoint, 'POST', body, is_https, **headers)
 
-  async def put(self, url, body, **headers):
-    return await self._fetch(url, 'PUT', body, **headers)
+  async def put(self, host, port, endpoint, body, is_https=False, **headers):
+    return await self._fetch(host, port, endpoint, 'PUT', body, is_https, **headers)
 
-  async def delete(self, url, body=None, **headers):
-    return await self._fetch(url, 'DELETE', body, **headers)
+  async def delete(self, host, port, endpoint, body=None, is_https=False, **headers):
+    return await self._fetch(host, port, endpoint, 'DELETE', body, is_https, **headers)
 
-  async def _fetch(self, url, method, body, **headers):
+  async def _fetch(self, host, port, endpoint, method, body, is_https=False, **headers):
+    protocol = 'https' if is_https else 'http'
     try:
       if isinstance(body, dict):
         body = json.dumps(body)
-      r = await self.__cli.fetch(url, method=method, body=body,
+      r = await self.__cli.fetch('%s://%s:%d%s'%(protocol, host, port, endpoint),
+                                 method=method, body=body,
                                  headers=dict(**self.__headers, **headers))
       body = r.body.decode('utf-8')
       if body:
@@ -102,11 +93,3 @@ class SecureAsyncHttpClient(Loggable):
       return 422, None, error(de.msg)
     except HTTPError as e:
       return e.response.code, None, error(e.response.body.decode('utf-8'))
-
-  def _get_auth_token(self):
-    try:
-      out = subprocess.check_output('dcos config show core.dcos_acs_token', shell=True)
-      return out.decode('utf-8').strip('\n')
-    except subprocess.CalledProcessError as e:
-      self.logger.error(e)
-      raise Exception('DC/OS is not properly set up and authenticated')

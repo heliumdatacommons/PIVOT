@@ -1,4 +1,3 @@
-import yaml
 import tornado
 
 from multiprocessing import Process
@@ -11,16 +10,8 @@ from container.handler import ContainersHandler, ContainerHandler, ServicesHandl
 from cluster.manager import ClusterManager
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
+from config import Configuration
 from util import dirname
-from util import Config, DCOSConfig, URLMap
-
-
-def load_config(cfg_file_path):
-  cfg = yaml.load(open(cfg_file_path))
-  cfg['url'] = URLMap(**{k: '%s/%s'%(cfg['dcos']['master_url'], cfg['dcos']['%s_endpoint'%k])
-                         for k in ['service_scheduler', 'job_scheduler', 'mesos_master']})
-  cfg['dcos'] = DCOSConfig(**cfg['dcos'])
-  return Config(**cfg)
 
 
 def start_server(config):
@@ -39,8 +30,8 @@ def start_server(config):
     (r'/api/ui', SwaggerUIHandler),
   ])
   server = tornado.httpserver.HTTPServer(app)
-  server.bind(config.port)
-  server.start(config.n_parallel)
+  server.bind(config.pivot.port)
+  server.start(config.pivot.n_parallel)
   tornado.ioloop.IOLoop.instance().start()
 
 
@@ -49,7 +40,7 @@ def start_cluster_monitor(config):
 
 
 if __name__ == '__main__':
-  config = load_config('%s/config.yml'%dirname(__file__))
+  config = Configuration.read_config('%s/config.yml'%dirname(__file__))
   p1 = Process(target=start_cluster_monitor, args=(config, ))
   p2 = Process(target=start_server, args=(config, ))
   p1.start()
