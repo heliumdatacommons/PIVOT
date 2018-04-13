@@ -280,11 +280,12 @@ class Service(Container):
     self._add_default_health_checks()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
-             env={k: parse_container_short_id(v, self.appliance)
-                  for k, v in self.env.items()},
+             env=dict(**self._get_default_env(),
+                      **{k: parse_container_short_id(v, self.appliance)
+                         for k, v in self.env.items()}),
              labels=self.labels,
              requirePorts=len(self.ports) > 0,
-             acceptedResourceRoles=[ "slave_public", "*" ],
+             acceptedResourceRoles=["slave_public", "*" ],
              container=dict(type='DOCKER',
                             volumes=[v.to_request() for v in self.volumes],
                             docker=dict(image=self.image,
@@ -328,6 +329,9 @@ class Service(Container):
         if p.protocol != 'tcp':
           continue
         self.add_health_check(HealthCheck(port_index=i))
+
+  def _get_default_env(self):
+    return dict(PIVOT_URL=parse_container_short_id('@pivot', 'sys'))
 
   def __str__(self):
     return '/%s/%s'%(self.appliance, self.id)

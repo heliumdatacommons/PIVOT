@@ -27,7 +27,7 @@ def parse_args():
 def create_pivot_config(args):
   pivot_cfg_f = '/opt/pivot/config.yml'
   pivot_cfg = yaml.load(open(pivot_cfg_f))
-  pivot_cfg['pivot'].update(port=args.port, n_parallel=args.n_parallel)
+  pivot_cfg['pivot'].update(master=args.master, port=args.port, n_parallel=args.n_parallel)
   pivot_cfg['mesos']['host'] = args.master
   pivot_cfg['marathon']['host'] = args.master
   pivot_cfg['chronos']['host'] = args.chronos

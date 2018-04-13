@@ -21,6 +21,7 @@ RUN mkdir -p /data/db \
 
 # install PIVOT
 COPY . /opt/pivot
+RUN mkdir /opt/scidas/log; exit 0
 RUN pip install -r /opt/pivot/requirement.txt
 
 # Copy launch script
