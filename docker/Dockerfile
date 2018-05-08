@@ -1,11 +1,11 @@
-from ubuntu:latest
+from ubuntu:xenial
 
 ARG GET_PIP_URL=https://bootstrap.pypa.io/get-pip.py
 
 # install python3.6
 RUN apt-get update \
-    && apt-get install -y software-properties-common python-software-properties curl \
-    && add-apt-repository -y ppa:jonathonf/python-3.6 \
+    && apt-get install -y software-properties-common curl \
+    && add-apt-repository ppa:deadsnakes/ppa \
     && apt-get update \
     && apt-get install -y python3.6 \
     && apt-get purge -y python3.5 python\
@@ -21,7 +21,7 @@ RUN mkdir -p /data/db \
 
 # install PIVOT
 COPY . /opt/pivot
-RUN mkdir /opt/scidas/log; exit 0
+RUN mkdir /opt/pivot/log; exit 0
 RUN pip install -r /opt/pivot/requirement.txt
 
 # Copy launch script

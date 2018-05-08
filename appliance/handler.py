@@ -4,18 +4,17 @@ import swagger
 
 from tornado.web import RequestHandler
 
-from appliance.base import Appliance
 from appliance.manager import ApplianceManager
 from container.manager import ContainerManager
 from util import message, error
-from util import Loggable
+from commons import Loggable
 
 
 class AppliancesHandler(RequestHandler, Loggable):
 
-  def initialize(self, config):
-    self.__app_mgr = ApplianceManager(config)
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__app_mgr = ApplianceManager()
+    self.__contr_mgr = ContainerManager()
 
   @swagger.operation
   async def post(self):
@@ -45,11 +44,6 @@ class AppliancesHandler(RequestHandler, Loggable):
     """
     try:
       data = tornado.escape.json_decode(self.request.body)
-      status, app, err = Appliance.pre_check(data)
-      if status != 200:
-        self.set_status(status)
-        self.write(error(err))
-        return
       status, app, err = await self.__app_mgr.create_appliance(data)
       self.set_status(status)
       self.write(json.dumps(app.to_render() if status == 201 else error(err)))
@@ -67,9 +61,9 @@ class ApplianceHandler(RequestHandler, Loggable):
     type: str
   """
 
-  def initialize(self, config):
-    self.__app_mgr = ApplianceManager(config)
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__app_mgr = ApplianceManager()
+    self.__contr_mgr = ContainerManager()
 
   @swagger.operation
   async def get(self, app_id):

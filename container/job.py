@@ -1,7 +1,7 @@
 import swagger
 
 from util import parse_container_short_id
-from container.base import Container, NetworkMode, ContainerState
+from container.base import Container, NetworkMode
 
 # Limitations:
 # 1. Inefficient job state monitoring: Chronos does not have an API for per-job state
@@ -82,23 +82,6 @@ class Job(Container):
     example: 2018-04-01T17:22:00Z
     """
     return self.__start_time
-
-  @classmethod
-  async def parse(cls, body, cluster_mgr):
-    ### TO BE IMPORVED: currently the body is the output of the job summary due to
-    ### limitations of Chronos API. With that being said, endpoints are not yet supported
-    ### for jobs.
-    assert isinstance(body, dict)
-    state = body['state'].lower().strip('1 ')
-    if body['status'] in ('success', 'failure'):
-      state = body['status']
-    state = dict(running=ContainerState.RUNNING,
-                 success=ContainerState.SUCCESS,
-                 failure=ContainerState.FAILED,
-                 queued=ContainerState.STAGING,
-                 idle=ContainerState.PENDING).get(state, ContainerState.SUBMITTED)
-    appliance, id = body['name'].split('.')
-    return dict(id=id, appliance=appliance, state=state)
 
   def to_render(self):
     return dict(**super(Job, self).to_render(),

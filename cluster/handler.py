@@ -4,13 +4,13 @@ import swagger
 from tornado.web import RequestHandler
 
 from cluster.manager import ClusterManager
-from util import Loggable
+from commons import Loggable
 
 
 class ClusterInfoHandler(RequestHandler, Loggable):
 
-  def initialize(self, config):
-    self.__cluster_mgr = ClusterManager(config)
+  def initialize(self):
+    self.__cluster_mgr = ClusterManager()
 
   @swagger.operation
   async def get(self):
@@ -42,7 +42,7 @@ class ClusterInfoHandler(RequestHandler, Loggable):
     if self.request.query_arguments:
       args = {k: [v.decode('utf-8') for v in vals]
               for k, vals in self.request.query_arguments.items()}
-      hosts = await self.__cluster_mgr.find_hosts_by_attributes(**args)
+      hosts = await self.__cluster_mgr.find_hosts(**args)
       self.write(json.dumps([h.to_render() for h in hosts]))
     else:
       hosts = await self.__cluster_mgr.get_cluster()

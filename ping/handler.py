@@ -2,7 +2,7 @@ import swagger
 
 from tornado.web import RequestHandler
 
-from util import Loggable
+from commons import Loggable
 
 
 class PingHandler(RequestHandler, Loggable):

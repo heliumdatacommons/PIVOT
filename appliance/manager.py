@@ -1,9 +1,5 @@
-import tornado
-import functools
-
-from tornado.ioloop import PeriodicCallback
-
-from util import Singleton, Loggable, MotorClient, AsyncHttpClientWrapper
+from config import config
+from commons import APIManager, Singleton, Loggable, MotorClient, AutonomousMonitor
 from appliance.base import Appliance
 from container.base import ContainerType, ContainerState
 from container.manager import ContainerManager
@@ -11,27 +7,33 @@ from container.manager import ContainerManager
 
 class ApplianceManager(Loggable, metaclass=Singleton):
 
-  def __init__(self, config):
-    self.__config = config
-    self.__http_cli = AsyncHttpClientWrapper()
-    self.__app_col = MotorClient().requester.appliance
-    self.__contr_col = MotorClient().requester.container
-    self.__contr_mgr = ContainerManager(config)
-    self.__app_monitor = ApplianceMonitor(self, self.__contr_mgr)
+  def __init__(self):
+    self.__app_api = ApplianceAPIManager()
+    self.__app_db = ApplianceDBManager()
+    self.__contr_mgr = ContainerManager()
 
   async def get_appliance(self, app_id):
-    status, app, err = await self._get_appliance_from_db(app_id)
+    status, app, err = await self.__app_db.get_appliance(app_id)
     if status != 200:
       return status, app, err
     app = Appliance(**app)
-    _, app.containers, _ = await self.__contr_mgr.get_containers(app_id)
+    status, app.containers, err = await self.__contr_mgr.get_containers(app_id)
+    if not app.containers:
+      self.logger.info("Empty appliance '%s', deleting"%app_id)
+      status, msg, err = await self.delete_appliance(app_id)
+      if err:
+        self.logger.info(err)
+      return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
+  async def get_appliances(self, **filters):
+    return self.__app_db.get_appliances(**filters)
+
   async def create_appliance(self, data):
-    status, _, _ = await self._get_appliance_from_db(data['id'])
+    status, _, _ = await self.get_appliance(data['id'])
     if status == 200:
       return 409, None, "Appliance '%s' already exists"%data['id']
-    status, app, err = self._instantiate_appliance(data)
+    status, app, err = Appliance.parse(data)
     if err:
       self.logger.error(err)
       return status, None, err
@@ -46,106 +48,118 @@ class ApplianceManager(Loggable, metaclass=Singleton):
       return status, None, err
     self.logger.info(msg)
     self.logger.info("Start monitoring appliance '%s'"%app)
-    self.__app_monitor.spawn(app)
+    ApplianceDAGMonitor(app).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
-    status, app, err = await self._get_appliance_from_db(app_id)
+    status, app, err = await self.__app_db.get_appliance(app_id)
     if err:
       self.logger.error(err)
       return status, None, err
     self.logger.info("Stop monitoring appliance '%s'"%app_id)
-    self.__app_monitor.stop(app_id)
-    status, msg, err = await self.__contr_mgr.delete_containers(appliance=app_id,
-                                                                type=ContainerType.JOB.value)
+    status, msg, err = await self.__contr_mgr.delete_containers(appliance=app_id)
     if err:
       self.logger.error(err)
       return 400, None, "Failed to deprovision jobs of appliance '%s'"%app_id
     self.logger.info(msg)
-    status, msg, err = await self._deprovision_group(app_id)
+    status, msg, err = await self.__app_api.deprovision_appliance(app_id)
     if err and status != 404:
       self.logger.error(err)
       return 400, None, "Failed to deprovision appliance '%s'"%app_id
-    status, msg, err = await self._delete_appliance_from_db(app_id)
-    if err:
-      self.logger.error(err)
-      return status, None, err
-    self.logger.info(msg)
+    ApplianceDeletionChecker(app_id).start()
     return status, msg, None
 
   async def save_appliance(self, app, upsert=True):
-    await self.__app_col.replace_one(dict(id=app.id), app.to_save(), upsert=upsert)
-    return 200, "Appliance '%s' has been saved"%app, None
+    return await self.__app_db.save_appliance(app, upsert)
 
   async def restore_appliance(self, app_id):
     raise NotImplemented
 
-  async def _get_appliance_from_db(self, app_id):
+
+class ApplianceAPIManager(APIManager):
+
+  def __init__(self):
+    super(ApplianceAPIManager, self).__init__()
+
+  async def get_appliance(self, app_id):
+    api = config.marathon
+    endpoint = '%s/groups/%s'%(api.endpoint, app_id)
+    return await self.http_cli.get(api.host, api.port, endpoint)
+
+  async def deprovision_appliance(self, app_id):
+    api = config.marathon
+    endpoint = '%s/groups/%s?force=true'%(api.endpoint, app_id)
+    status, msg, err = await self.http_cli.delete(api.host, api.port, endpoint)
+    if status not in (200, 404):
+      return status, None, err
+    return 200, "Services of appliance '%s' is being deprovisioned"%app_id, None
+
+
+class ApplianceDBManager(Loggable, metaclass=Singleton):
+
+  def __init__(self):
+    self.__app_col = MotorClient().requester.appliance
+
+  async def get_appliances(self, **filters):
+    return 200, [Appliance(**app) async for app in self.__app_col.find(filters)], None
+
+  async def get_appliance(self, app_id):
     app = await self.__app_col.find_one(dict(id=app_id))
     if not app:
       return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
-  async def _delete_appliance_from_db(self, app_id):
+  async def save_appliance(self, app, upsert=True):
+    await self.__app_col.replace_one(dict(id=app.id), app.to_save(), upsert=upsert)
+    return 200, "Appliance '%s' has been saved"%app, None
+
+  async def delete_appliance(self, app_id):
     await self.__app_col.delete_one(dict(id=app_id))
-    await self.__contr_col.delete_many(dict(appliance=app_id))
     return 200, "Appliance '%s' has been deleted"%app_id, None
 
-  async def _deprovision_group(self, app_id):
-    api = self.__config.marathon
-    endpoint = '%s/groups/%s?force=true'%(api.endpoint, app_id)
-    status, msg, err = await self.__http_cli.delete(api.host, api.port, endpoint)
-    if err:
-      return status, None, err
-    return 200, "Services of appliance '%s' have been deprovisioned"%app_id, None
 
-  def _instantiate_appliance(self, data):
-    app_id, containers = data['id'], data['containers']
-    try:
-      app = Appliance(app_id,
-                      [self.__contr_mgr.instantiate_container(dict(**c, appliance=app_id))
-                       for c in data['containers']])
-      status, msg, err = app.dag.construct_graph(app.containers)
-      if err:
-        return status, None, err
-      return 200, app, None
-    except ValueError as e:
-      return 422, None, str(e)
+class ApplianceDeletionChecker(AutonomousMonitor):
+
+  def __init__(self, app_id):
+    super(ApplianceDeletionChecker, self).__init__(3000)
+    self.__app_id = app_id
+    self.__app_api = ApplianceAPIManager()
+    self.__app_db = ApplianceDBManager()
+
+  async def callback(self):
+    status, _, err = await self.__app_api.get_appliance(self.__app_id)
+    if status == 200:
+      self.logger.info("Appliance '%s' still exists, deleting"%self.__app_id)
+      await self.__app_api.deprovision_appliance(self.__app_id)
+      return
+    if status == 404:
+      self.logger.info("Delete appliance '%s' from database"%self.__app_id)
+      await self.__app_db.delete_appliance(self.__app_id)
+    elif status != 200:
+      self.logger.error(err)
+    self.stop()
 
 
-class ApplianceMonitor(Loggable):
+class ApplianceDAGMonitor(AutonomousMonitor):
 
-  APP_MONITOR_INTERVAL = 5000
+  def __init__(self, app):
+    super(ApplianceDAGMonitor, self).__init__(5000)
+    self.__app = app
+    self.__app_mgr = ApplianceManager()
+    self.__contr_mgr = ContainerManager()
 
-  def __init__(self, app_mgr, contr_mgr):
-    self.__app_mgr = app_mgr
-    self.__contr_mgr = contr_mgr
-    self.__callbacks = {}
-
-  def spawn(self, app):
-    monitor_func = functools.partial(self._monitor_appliance, app)
-    tornado.ioloop.IOLoop.instance().add_callback(monitor_func)
-    cb = PeriodicCallback(monitor_func, self.APP_MONITOR_INTERVAL)
-    self.__callbacks[app.id] = cb
-    cb.start()
-
-  def stop(self, app_id):
-    cb = self.__callbacks.pop(app_id, None)
-    if cb:
-      cb.stop()
-
-  async def _monitor_appliance(self, app):
+  async def callback(self):
+    app = self.__app
     self.logger.info('Containers left: %s'%list(app.dag.parent_map.keys()))
-    cb = self.__callbacks.get(app.id, None)
-    if cb and cb.is_running and app.dag.is_empty:
+    if self.is_running and app.dag.is_empty:
       self.logger.info('DAG is empty, stop monitoring')
-      cb.stop()
-      self.__callbacks.pop(app.id, None)
+      self.stop()
       return
     free_contrs = [c.id for c in app.dag.get_free_containers()]
-    self.logger.info('Launch free containers: %s'%free_contrs)
+    self.logger.info('Free containers: %s'%free_contrs)
     for c in app.dag.get_free_containers():
       if c.state == ContainerState.SUBMITTED:
+        self.logger.info('Launch container: %s'%c)
         status, _, err = await self.__contr_mgr.provision_container(c)
         if status not in (200, 409):
           self.logger.info(status)
@@ -154,16 +168,15 @@ class ApplianceMonitor(Loggable):
     self.logger.info('Update DAG')
     for c in app.dag.get_free_containers():
       status, c, err = await self.__contr_mgr.get_container(app.id, c.id)
-      if err:
+      if status != 200:
         self.logger.error(err)
         if status == 404:
           status, _, _ = await self.__app_mgr.get_appliance(app.id)
           if status == 404:
             self.logger.info("Appliance '%s' is already deleted, stop monitoring"%app.id)
-            self.stop(app.id)
+            self.stop()
         continue
-      if (not app.dag.child_map.get(c.id, [])) \
-          or (c.type == ContainerType.SERVICE and c.state == ContainerState.RUNNING) \
+      if (c.type == ContainerType.SERVICE and c.state == ContainerState.RUNNING) \
           or (c.type == ContainerType.JOB and c.state == ContainerState.SUCCESS):
         app.dag.remove_container(c.id)
       else:

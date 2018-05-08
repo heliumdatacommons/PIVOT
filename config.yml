@@ -1,10 +1,10 @@
 ---
 pivot:
-  master: 10.52.0.52
+  master: 192.168.65.90
   port: 9090
   n_parallel: 8
 mesos:
-  host: 129.114.109.10
+  host: 192.168.65.90
   port: 5050
 marathon:
   port: 8080

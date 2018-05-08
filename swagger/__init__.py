@@ -8,7 +8,7 @@ from functools import wraps
 
 from swagger.base import Model, Property, Path, Operation, Parameter, Response
 from swagger.base import Content, RequestBody
-from util import Loggable, Singleton
+from commons import Loggable, Singleton
 
 
 DATA_TYPES = {

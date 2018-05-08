@@ -1,37 +1,28 @@
 from tornado.ioloop import PeriodicCallback
 
+from commons import APIManager, Singleton, MotorClient, Loggable, AsyncHttpClientWrapper
 from cluster.base import Host, HostResources
-from util import Singleton, MotorClient, Loggable, AsyncHttpClientWrapper
+from config import config
 
 
 class ClusterManager(Loggable, metaclass=Singleton):
 
   MONITOR_INTERVAL = 30000 # query cluster info every minute
 
-  def __init__(self, config):
-    self.__config = config
-    self.__host_col = MotorClient().requester.host
+  def __init__(self):
+    self.__cluster_db = ClusterDBManager()
     self.__http_cli = AsyncHttpClientWrapper()
 
   async def get_cluster(self):
-    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
-            async for h in self.__host_col.find()]
+    return self.__cluster_db.get_cluster()
 
-  async def find_hosts_by_attributes(self, **kwargs):
-    cond = {'attributes.%s'%k: {'$in': v} if isinstance(v, list) else v
-            for k, v in kwargs.items()}
-    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
-            async for h in self.__host_col.find(cond)]
-
-  async def update_hosts(self, hosts):
-    for h in hosts:
-      await self.__host_col.replace_one(dict(hostname=h.hostname), h.to_save(),
-                                        upsert=True)
+  async def find_hosts(self, **kwargs):
+    return self.__cluster_db.find_hosts(**kwargs)
 
   async def monitor(self):
 
     async def get_updated_master():
-      marathon_api, mesos_api = self.__config.marathon, self.__config.mesos
+      marathon_api, mesos_api = config.marathon, config.mesos
       status, body, err = await self.__http_cli.get(marathon_api.host, marathon_api.port,
                                                     '%s/leader'%marathon_api.endpoint)
       if status != 200:
@@ -45,7 +36,7 @@ class ClusterManager(Loggable, metaclass=Singleton):
 
     async def query_mesos():
       await get_updated_master()
-      api = self.__config.mesos
+      api = config.mesos
       status, body, err = await self.__http_cli.get(api.host, api.port,
                                                     '%s/master/slaves'%api.endpoint)
       if status != 200:
@@ -61,7 +52,29 @@ class ClusterManager(Loggable, metaclass=Singleton):
                                             h['resources']['ports'][1:-1].split(',')),
                     attributes=h['attributes'])
                for h in body['slaves']]
-      await self.update_hosts(hosts)
+      await self.__cluster_db.update_hosts(hosts)
 
     await query_mesos()
     PeriodicCallback(query_mesos, self.MONITOR_INTERVAL).start()
+
+
+class ClusterDBManager(Loggable, metaclass=Singleton):
+
+  def __init__(self):
+    self.__host_col = MotorClient().requester.host
+
+  async def get_cluster(self):
+    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
+            async for h in self.__host_col.find()]
+
+  async def find_hosts(self, **kwargs):
+    cond = {'attributes.%s'%k: {'$in': v} if isinstance(v, list) else v
+            for k, v in kwargs.items()}
+    return [Host(**h, resources=HostResources(**h.pop('resources', None)))
+            async for h in self.__host_col.find(cond)]
+
+  async def update_hosts(self, hosts):
+    for h in hosts:
+      await self.__host_col.replace_one(dict(hostname=h.hostname),
+                                        h.to_save(), upsert=True)
+

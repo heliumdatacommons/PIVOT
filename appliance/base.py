@@ -14,23 +14,29 @@ class Appliance:
 
   REQUIRED = frozenset(['id', 'containers'])
 
-  def __init__(self, id, containers=[], **kwargs):
-    self.__id = id
-    self.__containers = list(containers)
-    self.__dag = ContainerDAG()
-
   @classmethod
-  def pre_check(cls, data):
+  def parse(cls, data):
     if not isinstance(data, dict):
       return 422, None, "Failed to parse appliance request format: %s"%type(data)
     missing = Appliance.REQUIRED - data.keys()
     if missing:
       return 400, None, "Missing required field(s) of appliance: %s"%missing
+    containers = []
     for c in data['containers']:
-      status, _, err = Container.pre_check(c)
+      status, contr, err = Container.parse(dict(**c, appliance=data['id']))
       if err:
         return status, None, err
-    return 200, "Appliance %s is valid" % data['id'], None
+      containers.append(contr)
+    app = Appliance(data['id'], containers)
+    status, msg, err = app.dag.construct_graph(app.containers)
+    if err:
+      return status, None, err
+    return 200, app, None
+
+  def __init__(self, id, containers=[], **kwargs):
+    self.__id = id
+    self.__containers = list(containers)
+    self.__dag = ContainerDAG()
 
   @property
   @swagger.property

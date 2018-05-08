@@ -1,5 +1,8 @@
 import yaml
 
+from util import dirname
+
+
 class API:
 
   def __init__(self, host, port, endpoint, *args, **kwargs):
@@ -68,6 +71,7 @@ class GeneralConfig:
   def n_parallel(self):
     return self.__n_parallel
 
+
 class Configuration:
 
   @classmethod
@@ -101,3 +105,6 @@ class Configuration:
   @property
   def chronos(self):
     return self.__chronos
+
+
+config = Configuration.read_config('%s/config.yml'%dirname(__file__))

@@ -1,8 +1,7 @@
-import json
 import swagger
 
 from util import parse_container_short_id
-from container.base import Container, ContainerState, Endpoint, NetworkMode
+from container.base import Container, NetworkMode
 
 
 @swagger.model
@@ -218,43 +217,6 @@ class Service(Container):
 
     """
     return self.__minimum_capacity
-
-  @classmethod
-  async def parse(cls, body, cluster_mgr):
-    if isinstance(body, str):
-      body = json.loads(body.decode('utf-8'))
-    body = body['app']
-    tasks, min_capacity = body['tasks'], body['upgradeStrategy']['minimumHealthCapacity']
-    # parse state
-    state = ContainerState.determine_state([t['state'] for t in tasks], min_capacity)
-    if state == ContainerState.RUNNING and body.get('healthChecks', []):
-      tasks_healthy, tasks_unhealthy = body['tasksHealthy'], body['tasksUnhealthy']
-      instances = body['instances']
-      if tasks_healthy/instances < min_capacity:
-        if tasks_healthy + tasks_unhealthy < instances:
-          state = ContainerState.PENDING
-        else:
-          state = ContainerState.FAILED
-    # parse endpoints
-    endpoints, rack, host = [], None, None
-    if state == ContainerState.RUNNING:
-      for t in tasks:
-        hosts = await cluster_mgr.find_hosts_by_attributes(hostname=t['host'])
-        if not hosts: continue
-        host, rack = hosts[0], hosts[0].attributes.get('rack', None)
-        public_ip = host.attributes.get('public_ip', None)
-        if not public_ip: continue
-        if 'portDefinitions' in body:
-          for i, p in enumerate(body['portDefinitions']):
-            endpoints += [Endpoint(public_ip, p['port'], t['ports'][i], p['protocol'])]
-        else:
-          for i, p in enumerate(body['container']['portMappings']):
-            endpoints += [Endpoint(public_ip, p['containerPort'], t['ports'][i],
-                                   p['protocol'])]
-
-    _, appliance, id = body['id'].split('/')
-    return dict(id=id, appliance=appliance, state=state,
-                rack=rack, host=host and host.hostname, endpoints=endpoints)
 
   def add_health_check(self, hc):
     self.__health_checks.append(hc)

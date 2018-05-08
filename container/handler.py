@@ -4,8 +4,8 @@ import swagger
 from tornado.web import RequestHandler
 
 from container.manager import ContainerManager
+from commons import Loggable
 from util import message, error
-from util import Loggable
 
 
 class ServicesHandler(RequestHandler, Loggable):
@@ -17,8 +17,8 @@ class ServicesHandler(RequestHandler, Loggable):
     type: str
   """
 
-  def initialize(self, config):
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__contr_mgr = ContainerManager()
 
   @swagger.operation
   async def get(self, app_id):
@@ -54,8 +54,8 @@ class JobsHandler(RequestHandler, Loggable):
     type: str
   """
 
-  def initialize(self, config):
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__contr_mgr = ContainerManager()
 
   @swagger.operation
   async def get(self, app_id):
@@ -84,8 +84,8 @@ class JobsHandler(RequestHandler, Loggable):
 
 class ContainersHandler(RequestHandler, Loggable):
 
-  def initialize(self, config):
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__contr_mgr = ContainerManager()
 
 
 class ContainerHandler(RequestHandler, Loggable):
@@ -101,8 +101,8 @@ class ContainerHandler(RequestHandler, Loggable):
     type: str
   """
 
-  def initialize(self, config):
-    self.__contr_mgr = ContainerManager(config)
+  def initialize(self):
+    self.__contr_mgr = ContainerManager()
 
   @swagger.operation
   async def get(self, app_id, contr_id):

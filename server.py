@@ -10,20 +10,20 @@ from container.handler import ContainersHandler, ContainerHandler, ServicesHandl
 from cluster.manager import ClusterManager
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
-from config import Configuration
+from config import config
 from util import dirname
 
 
-def start_server(config):
+def start_server():
   app = Application([
     (r'/ping', PingHandler),
-    (r'/cluster', ClusterInfoHandler, dict(config=config)),
-    (r'/appliance', AppliancesHandler, dict(config=config)),
-    (r'/appliance/([a-z0-9-]+\/*)', ApplianceHandler, dict(config=config)),
-    (r'/appliance/([a-z0-9-]+\/*)/container',ContainersHandler, dict(config=config)),
-    (r'/appliance/([a-z0-9-]+\/*)/service',ServicesHandler, dict(config=config)),
-    (r'/appliance/([a-z0-9-]+\/*)/job',JobsHandler, dict(config=config)),
-    (r'/appliance/([a-z0-9-]+\/*)/container/([a-z0-9-]+\/*)', ContainerHandler, dict(config=config)),
+    (r'/cluster', ClusterInfoHandler),
+    (r'/appliance', AppliancesHandler),
+    (r'/appliance/([a-z0-9-]+\/*)', ApplianceHandler),
+    (r'/appliance/([a-z0-9-]+\/*)/container',ContainersHandler),
+    (r'/appliance/([a-z0-9-]+\/*)/service',ServicesHandler),
+    (r'/appliance/([a-z0-9-]+\/*)/job',JobsHandler),
+    (r'/appliance/([a-z0-9-]+\/*)/container/([a-z0-9-]+\/*)', ContainerHandler),
     (r'/appliance/([a-z0-9-]+\/*)/ui', ApplianceUIHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
     (r'/api', SwaggerAPIHandler),
@@ -35,14 +35,13 @@ def start_server(config):
   tornado.ioloop.IOLoop.instance().start()
 
 
-def start_cluster_monitor(config):
-  tornado.ioloop.IOLoop.instance().run_sync(ClusterManager(config).monitor)
+def start_cluster_monitor():
+  tornado.ioloop.IOLoop.instance().run_sync(ClusterManager().monitor)
 
 
 if __name__ == '__main__':
-  config = Configuration.read_config('%s/config.yml'%dirname(__file__))
-  p1 = Process(target=start_cluster_monitor, args=(config, ))
-  p2 = Process(target=start_server, args=(config, ))
+  p1 = Process(target=start_cluster_monitor)
+  p2 = Process(target=start_server)
   p1.start()
   p2.start()
   p1.join()
