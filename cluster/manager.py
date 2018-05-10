@@ -1,3 +1,5 @@
+import datetime
+
 from config import config
 from cluster.base import Host, HostResources
 from commons import Singleton, MotorClient, Loggable, APIManager, AutonomousMonitor
@@ -5,31 +7,46 @@ from commons import Singleton, MotorClient, Loggable, APIManager, AutonomousMoni
 
 class ClusterManager(Loggable, metaclass=Singleton):
 
-  MONITOR_INTERVAL = 30000
+  def __init__(self, monitor_interval=30000):
+    cluster_api, cluster_db = ClusterAPIManager(), ClusterDBManager()
+    self.__cluster_api, self.__cluster_db = cluster_api, cluster_db
+    self.__cluster_monitor = ClusterMonitor(cluster_api, cluster_db, monitor_interval)
 
-  def __init__(self):
-    self.__cluster_db = ClusterDBManager()
-    self.__cluster_api = ClusterAPIManager()
-    self.__cluster_monitor = ClusterMonitor(self.__cluster_api, self.__cluster_db)
-
-  async def get_cluster(self):
+  async def get_cluster(self, ttl=30):
+    if self._is_cache_expired(ttl):
+      await self.__cluster_monitor.update()
     return await self.__cluster_db.get_cluster()
 
-  async def find_hosts(self, **kwargs):
+  async def find_hosts(self, ttl=30, **kwargs):
+    if self._is_cache_expired(ttl):
+      await self.__cluster_monitor.update()
     return await self.__cluster_db.find_hosts(**kwargs)
 
   def start_monitor(self):
     self.__cluster_monitor.start()
 
+  def _is_cache_expired(self, ttl):
+    if ttl is None:
+      return False
+    if not self.__cluster_monitor.last_update:
+      return True
+    ttl = datetime.timedelta(seconds=ttl)
+    return self.__cluster_monitor.last_update - datetime.datetime.now(tz=None) > ttl
+
 
 class ClusterMonitor(AutonomousMonitor):
   
-  def __init__(self, api, db):
-    super(ClusterMonitor, self).__init__(30000)
+  def __init__(self, api, db, interval=30000):
+    super(ClusterMonitor, self).__init__(interval)
     self.__api = api
     self.__db = db
-  
-  async def callback(self):
+    self.__last_update = None
+
+  @property
+  def last_update(self):
+    return self.__last_update
+
+  async def update(self):
     status, master, err = await self.__api.get_current_master()
     if status != 200:
       self.logger.error(err)
@@ -43,6 +60,10 @@ class ClusterMonitor(AutonomousMonitor):
       self.logger.info(err)
       return
     await self.__db.update_hosts(hosts)
+    self.__last_update = datetime.datetime.now(tz=None)
+  
+  async def callback(self):
+    await self.update()
 
 
 class ClusterAPIManager(APIManager):

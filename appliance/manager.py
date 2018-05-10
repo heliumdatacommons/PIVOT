@@ -1,8 +1,8 @@
 from config import config
 from commons import APIManager, Singleton, Loggable, MotorClient, AutonomousMonitor
 from appliance.base import Appliance
-from container.base import ContainerType, ContainerState
 from container.manager import ContainerManager
+from scheduler import DefaultApplianceScheduler
 
 
 class ApplianceManager(Loggable, metaclass=Singleton):
@@ -48,7 +48,7 @@ class ApplianceManager(Loggable, metaclass=Singleton):
       return status, None, err
     self.logger.info(msg)
     self.logger.info("Start monitoring appliance '%s'"%app)
-    ApplianceDAGMonitor(app).start()
+    DefaultApplianceScheduler(app).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -138,49 +138,3 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     elif status != 200:
       self.logger.error(err)
     self.stop()
-
-
-class ApplianceDAGMonitor(AutonomousMonitor):
-
-  def __init__(self, app):
-    super(ApplianceDAGMonitor, self).__init__(5000)
-    self.__app = app
-    self.__app_mgr = ApplianceManager()
-    self.__contr_mgr = ContainerManager()
-
-  async def callback(self):
-    app = self.__app
-    self.logger.info('Containers left: %s'%list(app.dag.parent_map.keys()))
-    if self.is_running and app.dag.is_empty:
-      self.logger.info('DAG is empty, stop monitoring')
-      self.stop()
-      return
-    free_contrs = [c.id for c in app.dag.get_free_containers()]
-    self.logger.info('Free containers: %s'%free_contrs)
-    for c in app.dag.get_free_containers():
-      if c.state == ContainerState.SUBMITTED:
-        self.logger.info('Launch container: %s'%c)
-        status, _, err = await self.__contr_mgr.provision_container(c)
-        if status not in (200, 409):
-          self.logger.info(status)
-          self.logger.error("Failed to launch container '%s'"%c)
-          self.logger.error(err)
-    self.logger.info('Update DAG')
-    for c in app.dag.get_free_containers():
-      status, c, err = await self.__contr_mgr.get_container(app.id, c.id)
-      if status != 200:
-        self.logger.error(err)
-        if status == 404:
-          status, _, _ = await self.__app_mgr.get_appliance(app.id)
-          if status == 404:
-            self.logger.info("Appliance '%s' is already deleted, stop monitoring"%app.id)
-            self.stop()
-        continue
-      if (c.type == ContainerType.SERVICE and c.state == ContainerState.RUNNING) \
-          or (c.type == ContainerType.JOB and c.state == ContainerState.SUCCESS):
-        app.dag.remove_container(c.id)
-      else:
-        app.dag.update_container(c)
-    status, msg, err = await self.__app_mgr.save_appliance(app, False)
-    if err:
-      self.logger.error(err)

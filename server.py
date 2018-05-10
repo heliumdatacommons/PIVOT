@@ -1,6 +1,5 @@
 import tornado
 
-from multiprocessing import Process
 from tornado.web import Application, StaticFileHandler
 
 from cluster.handler import ClusterInfoHandler

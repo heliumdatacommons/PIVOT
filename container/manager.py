@@ -11,26 +11,26 @@ from config import config
 
 class ContainerManager(Loggable, metaclass=Singleton):
 
-  CONTAINER_REC_TTL = timedelta(seconds=3)
-
-  def __init__(self):
+  def __init__(self, contr_info_ttl=timedelta(seconds=3)):
     self.__service_api = ServiceAPIManager()
     self.__job_api = JobAPIManager()
     self.__contr_db = ContainerDBManager()
     self.__cluster_db = ClusterDBManager()
+    self.__contr_info_ttl = contr_info_ttl
 
   async def get_container(self, app_id, contr_id):
     status, contr, err = await self.__contr_db.get_container(app_id, contr_id)
     if status == 404:
       return status, contr, err
     if not contr.last_update or \
-        datetime.datetime.now(tz=None) - contr.last_update > self.CONTAINER_REC_TTL:
+        datetime.datetime.now(tz=None) - contr.last_update > self.__contr_info_ttl:
       status, contr, err = await self._get_updated_container(contr)
       if status == 404 and contr.state != ContainerState.SUBMITTED:
         self.logger.info("Deleted ghost container: %s"%contr)
         await self.__contr_db.delete_container(contr)
         return 404, None, err
       if status == 200:
+        contr.last_update = datetime.datetime.now(tz=None)
         await self.__contr_db.save_container(contr, False)
       elif status != 404:
         self.logger.error("Failed to update container '%s'"%contr)
@@ -42,7 +42,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     contrs_to_del, contrs_to_update = [], [],
     cur_time = datetime.datetime.now(tz=None)
     for c in contrs:
-      if c.last_update and cur_time - c.last_update <= self.CONTAINER_REC_TTL:
+      if c.last_update and cur_time - c.last_update <= self.__contr_info_ttl:
         continue
       status, c, err = await self._get_updated_container(c)
       if status == 404 and c.state != ContainerState.SUBMITTED:
@@ -56,8 +56,8 @@ class ContainerManager(Loggable, metaclass=Singleton):
         self.logger.error(err)
       else:
         self.logger.info(msg)
-
     for c in contrs_to_update:
+      c.last_update = datetime.datetime.now(tz=None)
       await self.__contr_db.save_container(c, upsert=False)
     return 200, contrs, None
 
@@ -122,7 +122,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
 
   async def _get_updated_container(self, contr):
     assert isinstance(contr, Container)
-    self.logger.info('Update container info: %s'%contr)
+    self.logger.debug('Update container info: %s'%contr)
     if contr.type == ContainerType.SERVICE:
       status, raw_service, err = await self.__service_api.get_service_update(contr)
       if not err:
@@ -235,7 +235,7 @@ class JobAPIManager(APIManager):
     if status != 200:
       self.logger.debug(err)
       return status, job, err
-    return status, body, None
+    return status, jobs[0], None
 
   async def provision_job(self, job):
     api = config.chronos

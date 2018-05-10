@@ -2,6 +2,7 @@ import swagger
 
 from enum import Enum
 
+from util import parse_datetime
 
 @swagger.enum
 class ContainerType(Enum):
@@ -416,7 +417,7 @@ class Container:
     self.__force_pull_image = force_pull_image
     self.__dependencies = dependencies
     self.__input_data = input_data
-    self.__last_update = last_update
+    self.__last_update = parse_datetime(last_update)
 
   @property
   @swagger.property
@@ -713,6 +714,10 @@ class Container:
   def host(self, host):
     self.__host = host
 
+  @last_update.setter
+  def last_update(self, last_update):
+    self.__last_update = parse_datetime(last_update)
+
   def add_env(self, **env):
     self.__env.update(env)
 
@@ -730,7 +735,7 @@ class Container:
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
                 input_data=self.input_data, rack=self.rack, host=self.host,
-                last_update=self.last_update)
+                last_update=self.last_update and self.last_update.isoformat())
 
   def to_save(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
@@ -743,4 +748,13 @@ class Container:
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
                 input_data=self.input_data, rack=self.rack, host=self.host,
-                last_update=self.last_update)
+                last_update=self.last_update and self.last_update.isoformat())
+
+  def __hash__(self):
+    return hash((self.id, self.appliance))
+
+  def __eq__(self, other):
+    return self.__class__ == other.__class__ \
+            and self.id == other.id \
+            and self.appliance == other.appliance
+
