@@ -392,7 +392,8 @@ class Container:
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
-               dependencies=[], rack=None, host=None, last_update=None, **kwargs):
+               dependencies=[], input_data=[], rack=None, host=None, last_update=None,
+               **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -414,6 +415,7 @@ class Container:
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = dependencies
+    self.__input_data = input_data
     self.__last_update = last_update
 
   @property
@@ -663,6 +665,21 @@ class Container:
     return list(self.__dependencies)
 
   @property
+  @swagger.property
+  def input_data(self):
+    """
+    Input data files consumed by the container
+    ---
+    type: list
+    items: str
+    default: []
+    example:
+      - /tempZone/rods/a.file
+      - /tempZone/rods/b.file
+    """
+    return list(self.__input_data)
+
+  @property
   def last_update(self):
     return self.__last_update
 
@@ -712,7 +729,8 @@ class Container:
                 ports=[p.to_render() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                rack=self.rack, host=self.host, last_update=self.last_update)
+                input_data=self.input_data, rack=self.rack, host=self.host,
+                last_update=self.last_update)
 
   def to_save(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
@@ -724,4 +742,5 @@ class Container:
                 ports=[p.to_save() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                rack=self.rack, host=self.host, last_update=self.last_update)
+                input_data=self.input_data, rack=self.rack, host=self.host,
+                last_update=self.last_update)

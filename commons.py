@@ -81,7 +81,7 @@ class AsyncHttpClientWrapper(Loggable):
       return e.code, None, error(e.response.body.decode('utf-8'))
 
 
-class APIManager(Loggable, metaclass=Singleton):
+class APIManager(Loggable):
 
   def __init__(self):
     self.http_cli = AsyncHttpClientWrapper()
@@ -107,4 +107,4 @@ class AutonomousMonitor(Loggable, metaclass=ABCMeta):
 
   @abstractmethod
   async def callback(self):
-    pass
+    raise NotImplemented

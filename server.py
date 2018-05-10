@@ -32,20 +32,12 @@ def start_server():
   server = tornado.httpserver.HTTPServer(app)
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
+  tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
   tornado.ioloop.IOLoop.instance().start()
 
 
-def start_cluster_monitor():
-  tornado.ioloop.IOLoop.instance().run_sync(ClusterManager().monitor)
-
-
 if __name__ == '__main__':
-  p1 = Process(target=start_cluster_monitor)
-  p2 = Process(target=start_server)
-  p1.start()
-  p2.start()
-  p1.join()
-  p2.join()
+  start_server()
 
 
 
