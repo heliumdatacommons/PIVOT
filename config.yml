@@ -11,5 +11,8 @@ chronos:
   port: 9090
 exhibitor:
   port: 8181
+irods:
+  host: 18.204.34.120
+  port: 8080
 
 

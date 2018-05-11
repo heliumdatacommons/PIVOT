@@ -56,7 +56,7 @@ class Agent:
 
   def __init__(self, hostname, resources, attributes={}, *args, **kwargs):
     self.__resources = resources
-    self.__attributes = dict(**attributes)
+    self.__attributes = dict(attributes)
     self.__attributes.update(hostname=hostname)
 
   @property

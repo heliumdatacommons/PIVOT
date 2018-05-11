@@ -283,6 +283,8 @@ class Service(Container):
       r.setdefault('constraints', []).append(['rack', 'CLUSTER', self.rack])
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'CLUSTER', self.host])
+    for k, v in self.constraints:
+      r.setdefault('constraints', []).append([str(k), 'CLUSTER', str(v)])
     return r
 
   def _add_default_health_checks(self):

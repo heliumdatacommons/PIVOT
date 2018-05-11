@@ -3,7 +3,8 @@ from commons import MotorClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
-from scheduler import DefaultApplianceScheduler
+# from scheduler import DefaultApplianceScheduler
+from scheduler.plugin.location import LocationAwareApplianceScheduler
 from scheduler.manager import ApplianceDAGDBManager
 
 
@@ -50,7 +51,8 @@ class ApplianceManager(Manager):
       return status, None, err
     self.logger.info(msg)
     self.logger.info("Start monitoring appliance '%s'"%app)
-    scheduler = DefaultApplianceScheduler(app)
+    # scheduler = DefaultApplianceScheduler(app)
+    scheduler = LocationAwareApplianceScheduler(app)
     status, msg, err = await scheduler.initialize()
     if status != 200:
       self.logger.error(err)

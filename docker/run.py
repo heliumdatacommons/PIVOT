@@ -19,6 +19,8 @@ def parse_args():
   parser.add_argument('--n_parallel', dest='n_parallel', type=int,
                       default=multiprocessing.cpu_count(),
                       help='PIVOT parallelism level')
+  parser.add_argument('--irods_host', dest='irods_host', type=str, help='iRODS API host')
+  parser.add_argument('--irods_port', dest='irods_port', type=int, help='iRODS API port')
   return parser.parse_args()
 
 
@@ -26,6 +28,8 @@ def create_pivot_config(args):
   pivot_cfg_f = '/opt/pivot/config.yml'
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master, port=args.port, n_parallel=args.n_parallel)
+  if args.irods_host and args.irods_port:
+    pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
 def check_mongodb_port():

@@ -394,7 +394,7 @@ class Container:
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
                dependencies=[], input_data=[], rack=None, host=None, last_update=None,
-               **kwargs):
+               constraints=[], **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -415,9 +415,10 @@ class Container:
     self.__host = host
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
-    self.__dependencies = dependencies
-    self.__input_data = input_data
+    self.__dependencies = list(dependencies)
+    self.__input_data = list(input_data)
     self.__last_update = parse_datetime(last_update)
+    self.__constraints = list(constraints)
 
   @property
   @swagger.property
@@ -684,6 +685,10 @@ class Container:
   def last_update(self):
     return self.__last_update
 
+  @property
+  def constraints(self):
+    return list(self.__constraints)
+
   @image.setter
   def image(self, image):
     assert isinstance(image, str)
@@ -724,6 +729,9 @@ class Container:
   def add_dependency(self, dep):
     self.__dependencies.append(dep)
 
+  def add_constraint(self, key, val):
+    self.__constraints += (key, val),
+
   def to_render(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
@@ -734,8 +742,7 @@ class Container:
                 ports=[p.to_render() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                input_data=self.input_data, rack=self.rack, host=self.host,
-                last_update=self.last_update and self.last_update.isoformat())
+                input_data=self.input_data, rack=self.rack, host=self.host)
 
   def to_save(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
@@ -748,7 +755,8 @@ class Container:
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
                 input_data=self.input_data, rack=self.rack, host=self.host,
-                last_update=self.last_update and self.last_update.isoformat())
+                last_update=self.last_update and self.last_update.isoformat(),
+                constraints=self.constraints)
 
   def __hash__(self):
     return hash((self.id, self.appliance))

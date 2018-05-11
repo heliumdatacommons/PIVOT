@@ -1,83 +1,9 @@
 from abc import ABCMeta, abstractmethod
 
-from container.base import ContainerState, ContainerType
-from container.manager import ContainerManager
-from scheduler.base import ApplianceDAG
+from scheduler.base import ApplianceDAG, SchedulePlan
 from scheduler.manager import SchedulerManager
 
-from commons import AutonomousMonitor, Loggable
-
-
-class SchedulePlan(Loggable):
-
-  def __init__(self, id, contrs):
-    self.__id = id
-    self.__contr_mgr = ContainerManager()
-    self.__waiting = {c: 0 for c in contrs}
-    self.__provisioned = set()
-    self.__done = set()
-    self.__failed = set()
-    self.__is_stopped = False
-
-  @property
-  def id(self):
-    return self.__id
-
-  @property
-  def is_stopped(self):
-    return self.__is_stopped
-
-  @property
-  def is_finished(self):
-    return not self.__waiting and not self.__provisioned and self.__done
-
-  @property
-  def waiting(self):
-    return dict(self.__waiting)
-
-  @property
-  def provisioned(self):
-    return set(self.__provisioned)
-
-  @property
-  def done(self):
-    return set(self.__done)
-
-  @property
-  def failed(self):
-    return set(self.__failed)
-
-  def stop(self):
-    self.__is_stopped = True
-
-  async def execute(self):
-    for c, n_retry in dict(self.__waiting).items():
-      if c.state != ContainerState.SUBMITTED:
-        continue
-      self.logger.info('Launch container: %s'%c)
-      status, _, err = await self.__contr_mgr.provision_container(c)
-      if status in (200, 409):
-        if self.__waiting.pop(c, None) is not None:
-          self.__provisioned.add(c)
-      else:
-        self.logger.info(status)
-        self.logger.error("Failed to launch container '%s'"%c)
-        self.logger.error(err)
-        if n_retry < 3:
-          self.__waiting[c] += 1
-        else:
-          self.__failed.add(c)
-
-  async def update(self):
-    for c in list(self.__provisioned):
-      status, c, err = await self.__contr_mgr.get_container(c.appliance, c.id)
-      if status != 200:
-        self.logger.error(err)
-        continue
-      if (c.type == ContainerType.SERVICE and c.state == ContainerState.RUNNING) \
-          or (c.type == ContainerType.JOB and c.state == ContainerState.SUCCESS):
-        self.__provisioned.remove(c)
-        self.__done.add(c)
+from commons import AutonomousMonitor
 
 
 class AbstractApplianceScheduler(AutonomousMonitor, metaclass=ABCMeta):
@@ -127,6 +53,10 @@ class DefaultApplianceScheduler(AbstractApplianceScheduler):
     self.__app = app
     self.__dag = None
 
+  @property
+  def dag(self):
+    return self.__dag
+
   async def initialize(self):
     self.__dag = ApplianceDAG(self.__app)
     status, msg, err = self.__dag.construct()
@@ -134,30 +64,32 @@ class DefaultApplianceScheduler(AbstractApplianceScheduler):
     return status, msg, err
 
   async def schedule(self, plans):
-    assert self.__dag is not None
-    await self._ensure_appliance_exist()
+    assert self.dag is not None
+    await self.ensure_appliance_exist()
     for p in plans.values():
       if p.failed:
-        print("Plan '%s' Failed"%p.id)
+        self.logger.info("Plan '%s' Failed"%p.id)
         p.stop()
         continue
       for c in p.provisioned:
-        self.__dag.update_container(c)
+        self.dag.update_container(c)
       for c in p.done:
-        self.__dag.remove_container(c.id)
+        self.dag.remove_container(c.id)
     self.logger.info("Update the DAG in the database")
-    status, msg, err = await self.sched_mgr.update_appliance_dag(self.__dag)
+    status, msg, err = await self.sched_mgr.update_appliance_dag(self.dag)
     if err:
       self.logger.error(err)
-    contrs = self.__dag.get_free_containers()
+    contrs = self.dag.get_free_containers()
     self.logger.info('Free containers: %s'%[c.id for c in contrs])
     new_plans = [SchedulePlan(c.id, [c]) for c in contrs if c.id not in plans]
     if new_plans:
       self.logger.info('New plans: %s'%[p.id for p in new_plans])
     return new_plans
 
-  async def _ensure_appliance_exist(self):
+  async def ensure_appliance_exist(self):
     status, _, _ = await self.sched_mgr.get_appliance_dag(self.__app.id)
     if status == 404:
       self.logger.info("Appliance '%s' is already deleted, stop scheduling"%self.__app.id)
       self.stop()
+
+
