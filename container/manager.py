@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from commons import APIManager, Singleton, MotorClient, Loggable
 from container.base import Container, ContainerType, ContainerState, Endpoint
-from cluster.manager import ClusterDBManager
+from cluster.manager import AgentDBManager
 from config import config
 
 
@@ -15,7 +15,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     self.__service_api = ServiceAPIManager()
     self.__job_api = JobAPIManager()
     self.__contr_db = ContainerDBManager()
-    self.__cluster_db = ClusterDBManager()
+    self.__cluster_db = AgentDBManager()
     self.__contr_info_ttl = contr_info_ttl
 
   async def get_container(self, app_id, contr_id):
@@ -159,7 +159,7 @@ class ContainerManager(Loggable, metaclass=Singleton):
     endpoints, rack, host = [], None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
-        hosts = await self.__cluster_db.find_hosts(hostname=t['host'])
+        hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
         host, rack = hosts[0], hosts[0].attributes.get('rack', None)
         public_ip = host.attributes.get('public_ip', None)

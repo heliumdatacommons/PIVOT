@@ -5,7 +5,7 @@ from util import dirname
 
 class API:
 
-  def __init__(self, host, port, endpoint, *args, **kwargs):
+  def __init__(self, port, endpoint, host=None, *args, **kwargs):
     self.__host = host
     self.__port = int(port)
     self.__endpoint = endpoint
@@ -33,23 +33,30 @@ class API:
 
 class MesosAPI(API):
   
-  def __init__(self, host, port=5050, *args, **kwargs):
-    kwargs.update(host=host, port=port, endpoint='')
+  def __init__(self, port=5050, *args, **kwargs):
+    kwargs.update(port=port, endpoint='')
     super(MesosAPI, self).__init__(*args, **kwargs)
 
 
 class MarathonAPI(API):
 
-  def __init__(self, host, port=8080, *args, **kwargs):
-    kwargs.update(host=host, port=port, endpoint='/v2')
+  def __init__(self, port=8080, *args, **kwargs):
+    kwargs.update(port=port, endpoint='/v2')
     super(MarathonAPI, self).__init__(*args, **kwargs)
 
 
 class ChronosAPI(API):
 
-  def __init__(self, host, port=9090, *args, **kwargs):
-    kwargs.update(host=host, port=port, endpoint='/v1/scheduler')
+  def __init__(self, port=9090, *args, **kwargs):
+    kwargs.update(port=port, endpoint='/v1/scheduler')
     super(ChronosAPI, self).__init__(*args, **kwargs)
+
+
+class ExhibitorAPI(API):
+
+  def __init__(self, port=8181, *args, **kwargs):
+    kwargs.update(port=port, endpoint='/exhibitor/v1')
+    super(ExhibitorAPI, self).__init__(*args, **kwargs)
 
 
 class GeneralConfig:
@@ -71,6 +78,10 @@ class GeneralConfig:
   def n_parallel(self):
     return self.__n_parallel
 
+  @master.setter
+  def master(self, master):
+    self.__master = master
+
 
 class Configuration:
 
@@ -78,17 +89,18 @@ class Configuration:
   def read_config(cls, cfg_file_path):
     cfg = yaml.load(open(cfg_file_path))
     pivot_cfg = GeneralConfig(**cfg.get('pivot', {}))
-    mesos_cfg, marathon_cfg = cfg.get('mesos', {}), cfg.get('marathon', {})
-    mesos_cfg['host'], marathon_cfg['host'] = pivot_cfg.master, pivot_cfg.master
     return Configuration(pivot=pivot_cfg,
-                         mesos=MesosAPI(**mesos_cfg), marathon=MarathonAPI(**marathon_cfg),
-                         chronos=ChronosAPI(**cfg.get('chronos', {})))
+                         mesos=MesosAPI(**cfg.get('mesos', {})),
+                         marathon=MarathonAPI(**cfg.get('marathon', {})),
+                         chronos=ChronosAPI(**cfg.get('chronos', {})),
+                         exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})))
 
-  def __init__(self, pivot, mesos, marathon, chronos):
+  def __init__(self, pivot, mesos=None, marathon=None, chronos=None, exhibitor=None):
     self.__pivot = pivot
     self.__mesos = mesos
     self.__marathon = marathon
     self.__chronos = chronos
+    self.__exhibitor = exhibitor
 
   @property
   def pivot(self):
@@ -106,5 +118,8 @@ class Configuration:
   def chronos(self):
     return self.__chronos
 
+  @property
+  def exhibitor(self):
+    return self.__exhibitor
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))

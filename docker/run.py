@@ -12,10 +12,8 @@ from argparse import ArgumentParser
 
 def parse_args():
   parser = ArgumentParser(description="Launch PIVOT")
-  parser.add_argument('--master', dest='master', type=str, required=True,
+  parser.add_argument('--master', dest='master', type=str, default='zk-1.zk',
                       help='Mesos/Marathon master host')
-  parser.add_argument('--chronos', dest='chronos', type=str, required=True,
-                      help='Chronos host')
   parser.add_argument('--port', dest='port', type=int, default=9090,
                       help='PIVOT listen port')
   parser.add_argument('--n_parallel', dest='n_parallel', type=int,
@@ -28,16 +26,11 @@ def create_pivot_config(args):
   pivot_cfg_f = '/opt/pivot/config.yml'
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master, port=args.port, n_parallel=args.n_parallel)
-  pivot_cfg['mesos']['host'] = args.master
-  pivot_cfg['marathon']['host'] = args.master
-  pivot_cfg['chronos']['host'] = args.chronos
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
-
 
 def check_mongodb_port():
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   return sock.connect_ex(('127.0.0.1', 27017)) == 0
-
 
 def run_pivot():
   try:

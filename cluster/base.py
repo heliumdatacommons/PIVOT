@@ -4,9 +4,53 @@ import swagger
 
 
 @swagger.model
-class Host:
+class Master:
   """
-  Physical host in the cluster
+  Mesos master in the cluster
+
+  """
+
+  def __init__(self, hostname, is_leader, *args, **kwargs):
+    self.__hostname = hostname
+    self.__is_leader = is_leader
+
+  @property
+  @swagger.property
+  def hostname(self):
+    """
+    Hostname
+
+    ---
+    type: str
+    read_only: true
+    example: 10.52.1.1
+
+    """
+    return self.__hostname
+
+  @property
+  def is_leader(self):
+    """
+    Whether the master is the leader
+    ---
+    type: bool
+    read_only: true
+    example: true
+
+    """
+    return self.__is_leader
+
+  def to_render(self):
+    return dict(hostname=self.hostname, is_leader=self.is_leader)
+
+  def to_save(self):
+    return self.to_render()
+
+
+@swagger.model
+class Agent:
+  """
+  Physical DC/OS agent in the cluster
 
   """
 
@@ -44,7 +88,7 @@ class Host:
   @swagger.property
   def attributes(self):
     """
-    Key-value attribute pairs associated with the host
+    Key-value attribute pairs associated with the agent
 
     ---
     type: dict
@@ -66,9 +110,9 @@ class Host:
 
 
 @swagger.model
-class HostResources:
+class AgentResources:
   """
-  Resources on a physical host
+  Resources on an agent
 
   """
 

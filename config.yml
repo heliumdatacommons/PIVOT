@@ -1,15 +1,15 @@
 ---
 pivot:
-  master: 192.168.65.90
+  master: m1.dcos
   port: 9090
   n_parallel: 8
 mesos:
-  host: 192.168.65.90
   port: 5050
 marathon:
   port: 8080
 chronos:
-  host: 129.114.109.135
   port: 9090
+exhibitor:
+  port: 8181
 
 
