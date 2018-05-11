@@ -3,13 +3,14 @@ import datetime
 
 from datetime import timedelta
 
-from commons import APIManager, Singleton, MotorClient, Loggable
+from commons import MotorClient
+from commons import APIManager, Manager
 from container.base import Container, ContainerType, ContainerState, Endpoint
 from cluster.manager import AgentDBManager
 from config import config
 
 
-class ContainerManager(Loggable, metaclass=Singleton):
+class ContainerManager(Manager):
 
   def __init__(self, contr_info_ttl=timedelta(seconds=3)):
     self.__service_api = ServiceAPIManager()
@@ -229,7 +230,9 @@ class JobAPIManager(APIManager):
     api = config.chronos
     endpoint = '%s/jobs/summary'%api.endpoint
     status, body, err = await self.http_cli.get(api.host, api.port, endpoint)
-    jobs = [j for j in body['jobs'] if j['name'] == str(job)]
+    if not body:
+      return status, None, err
+    jobs = [j for j in body['jobs'] if j and j['name'] == str(job)]
     if not jobs:
       return 404, job, "Job '%s' is not found"%job
     if status != 200:
@@ -254,7 +257,7 @@ class JobAPIManager(APIManager):
     return await self.http_cli.delete(api.host, api.port, endpoint)
 
 
-class ContainerDBManager(Loggable, metaclass=Singleton):
+class ContainerDBManager(Manager):
 
   def __init__(self):
     self.__contr_col = MotorClient().requester.container

@@ -81,7 +81,12 @@ class AsyncHttpClientWrapper(Loggable):
       return e.code, None, error(e.response.body.decode('utf-8'))
 
 
-class APIManager(Loggable):
+class Manager(Loggable, metaclass=Singleton):
+
+  def __init__(self): pass
+
+
+class APIManager(Manager):
 
   def __init__(self):
     self.http_cli = AsyncHttpClientWrapper()

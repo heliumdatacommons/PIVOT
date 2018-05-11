@@ -21,7 +21,7 @@ RUN mkdir -p /data/db \
 
 # install PIVOT
 COPY . /opt/pivot
-RUN mkdir /opt/pivot/log; exit 0
+RUN ls /opt/pivot/log > /dev/null 2> /dev/null || mkdir /opt/pivot/log
 RUN pip install -r /opt/pivot/requirement.txt
 
 # Copy launch script

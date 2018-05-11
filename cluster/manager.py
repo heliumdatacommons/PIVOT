@@ -2,10 +2,11 @@ import datetime
 
 from config import config
 from cluster.base import Master, Agent, AgentResources
-from commons import Singleton, MotorClient, Loggable, APIManager, AutonomousMonitor
+from commons import MotorClient, AutonomousMonitor
+from commons import APIManager, Manager
 
 
-class ClusterManager(Loggable, metaclass=Singleton):
+class ClusterManager(Manager):
 
   def __init__(self, monitor_interval=30000):
     cluster_api, agent_db = ClusterAPIManager(), AgentDBManager()
@@ -144,7 +145,7 @@ class ClusterAPIManager(APIManager):
     return 200, (tasks[0]['host'], tasks[0]['ports'][0]), None
 
 
-class MasterDBManager(Loggable, metaclass=Singleton):
+class MasterDBManager(Manager):
 
   def __init__(self):
     self.__master_col = MotorClient().requester.master
@@ -161,7 +162,7 @@ class MasterDBManager(Loggable, metaclass=Singleton):
                                         master.to_save(), upsert=True)
 
 
-class AgentDBManager(Loggable, metaclass=Singleton):
+class AgentDBManager(Manager):
 
   def __init__(self):
     self.__agent_col = MotorClient().requester.agent

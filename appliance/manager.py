@@ -1,16 +1,18 @@
 from config import config
-from commons import APIManager, Singleton, Loggable, MotorClient, AutonomousMonitor
+from commons import MotorClient, AutonomousMonitor
+from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
 from scheduler import DefaultApplianceScheduler
+from scheduler.manager import ApplianceDAGDBManager
 
 
-class ApplianceManager(Loggable, metaclass=Singleton):
+class ApplianceManager(Manager):
 
   def __init__(self):
     self.__app_api = ApplianceAPIManager()
-    self.__app_db = ApplianceDBManager()
     self.__contr_mgr = ContainerManager()
+    self.__app_db = ApplianceDBManager()
 
   async def get_appliance(self, app_id):
     status, app, err = await self.__app_db.get_appliance(app_id)
@@ -48,7 +50,12 @@ class ApplianceManager(Loggable, metaclass=Singleton):
       return status, None, err
     self.logger.info(msg)
     self.logger.info("Start monitoring appliance '%s'"%app)
-    DefaultApplianceScheduler(app).start()
+    scheduler = DefaultApplianceScheduler(app)
+    status, msg, err = await scheduler.initialize()
+    if status != 200:
+      self.logger.error(err)
+      return status, msg, err
+    scheduler.start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -95,7 +102,7 @@ class ApplianceAPIManager(APIManager):
     return 200, "Services of appliance '%s' is being deprovisioned"%app_id, None
 
 
-class ApplianceDBManager(Loggable, metaclass=Singleton):
+class ApplianceDBManager(Manager):
 
   def __init__(self):
     self.__app_col = MotorClient().requester.appliance
@@ -125,6 +132,7 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     self.__app_id = app_id
     self.__app_api = ApplianceAPIManager()
     self.__app_db = ApplianceDBManager()
+    self.__dag_db = ApplianceDAGDBManager()
 
   async def callback(self):
     status, _, err = await self.__app_api.get_appliance(self.__app_id)
@@ -135,6 +143,7 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     if status == 404:
       self.logger.info("Delete appliance '%s' from database"%self.__app_id)
       await self.__app_db.delete_appliance(self.__app_id)
+      await self.__dag_db.delete_appliance_dag(self.__app_id)
     elif status != 200:
       self.logger.error(err)
     self.stop()
