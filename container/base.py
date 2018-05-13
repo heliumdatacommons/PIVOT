@@ -1,8 +1,16 @@
+import re
 import swagger
 
 from enum import Enum
 
 from util import parse_datetime
+
+
+def parse_container_short_id(p, appliance):
+  return re.sub(r'(.*)\@([a-z0-9\.-]+)(.*)',
+                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
+                str(p))
+
 
 @swagger.enum
 class ContainerType(Enum):

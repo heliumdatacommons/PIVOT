@@ -45,7 +45,6 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
         else:
           self.logger.info("Container '%s' will land on %s"%(c.id, locs[0]))
           c.add_constraint('region', locs[0])
-          print(c.id, c.constraints)
       new_plans += SchedulePlan(c.id, [c]),
     if new_plans:
       self.logger.info('New plans: %s'%[p.id for p in new_plans])
@@ -60,7 +59,6 @@ class iRODSAPIManager(APIManager):
   async def get_replica_locations(self, lfn):
     api = config.irods
     endpoint = '%s/getReplicas?filename=%s'%(api.endpoint, url_escape(lfn))
-    print(endpoint)
     status, replicas, err = await self.http_cli.get(api.host, api.port, endpoint)
     if status != 200:
       return status, None, err

@@ -1,5 +1,4 @@
 import os
-import re
 import dateutil.parser
 
 
@@ -13,12 +12,6 @@ def message(msg):
 
 def error(msg):
   return dict(error=msg)
-
-
-def parse_container_short_id(p, appliance):
-  return re.sub(r'(.*)\@([a-z0-9\.-]+)(.*)',
-                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
-                str(p))
 
 
 def parse_datetime(d):
