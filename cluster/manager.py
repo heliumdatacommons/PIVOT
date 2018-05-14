@@ -123,12 +123,40 @@ class ClusterAPIManager(APIManager):
                                                 '%s/master/slaves'%api.endpoint)
     if status != 200:
       return status, None, err
+
+    def calc_available_resource(h, type):
+      if type == 'ports':
+        ports, used = [list(h[t][type][1: -1].split(',')) if type in h[t] else []
+                       for t in ('resources', 'used_resources')]
+        ports = sorted([list(map(int, p.split('-'))) for p in ports])
+        used = sorted([list(map(int, p.split('-'))) for p in used])
+        unused, u_idx = [], 0
+        for i, (ps, pe) in enumerate(ports):
+          if u_idx == len(used):
+            unused += ports[i + 1: ]
+            break
+          us, ue = used[u_idx]
+          if pe < us:
+            unused += (ps, pe),
+          else:
+            if ps < us:
+              unused += (ps, us - 1),
+            if pe > ue:
+              unused += (ue + 1, pe),
+            u_idx += 1
+        return list(map(lambda x: '-'.join([str(i) for i in x]), unused))
+      else:
+        return(h['resources'].get(type, 0)
+               - h['used_resources'].get(type, 0)
+               - h['offered_resources'].get(type, 0)
+               - h['reserved_resources'].get(type, 0))
+
     agents = [Agent(hostname=h['hostname'],
-                   resources=AgentResources(h['resources']['cpus'],
-                                            h['resources']['mem'],
-                                            h['resources']['disk'],
-                                            h['resources']['gpus'],
-                                          h['resources']['ports'][1:-1].split(',')),
+                   resources=AgentResources(calc_available_resource(h, 'cpus'),
+                                            calc_available_resource(h, 'mem'),
+                                            calc_available_resource(h, 'disk'),
+                                            calc_available_resource(h, 'gpus'),
+                                            calc_available_resource(h, 'ports')),
                    attributes=h['attributes'])
              for h in body['slaves']]
     return status, agents, None

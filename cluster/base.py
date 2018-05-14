@@ -121,7 +121,7 @@ class AgentResources:
     self.__mem = mem
     self.__disk = disk
     self.__gpus = gpus
-    self.__port_ranges = [tuple(map(lambda p: int(p), p.split('-'))) for p in port_ranges]
+    self.__port_ranges = [tuple(map(int, p.split('-'))) for p in port_ranges]
 
   @property
   @swagger.property
@@ -194,7 +194,7 @@ class AgentResources:
       - 8182-32000
 
     """
-    return self.__port_ranges
+    return list(self.__port_ranges)
 
   def check_port_availability(self, p):
     assert isinstance(p, int)
@@ -207,7 +207,7 @@ class AgentResources:
 
   def to_render(self):
     return dict(cpus=self.cpus, mem=self.mem, disk=self.disk, gpus=self.gpus,
-                port_ranges=['%d-%d'%p for p in self.port_ranges])
+                port_ranges=['%d-%d'%(ps, pe) for ps, pe in self.port_ranges])
 
   def to_save(self):
     return self.to_render()

@@ -52,11 +52,11 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
                   if agent.resources.cpus >= c.resources.cpus
                   and agent.resources.mem >= c.resources.mem
                   and agent.resources.disk >= c.resources.disk]
-        if not agents:
+        if agents:
+          self.logger.info("Container '%s' will land on %s"%(c.id, agents[0].hostname))
+          c.host = agents[0].hostname
+        else:
           self.logger.info("No matched agents have sufficient resources for '%s'"%c)
-          continue
-        self.logger.info("Container '%s' will land on %s"%(c.id, agents[0].hostname))
-        c.host = agents[0].hostname
       self.__contr_db.save_container(c, False)
       new_plans += SchedulePlan(c.id, [c]),
     if new_plans:
