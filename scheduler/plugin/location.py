@@ -2,6 +2,8 @@ from tornado.escape import url_escape
 
 from scheduler import DefaultApplianceScheduler
 from scheduler.base import SchedulePlan
+from cluster.manager import ClusterManager
+from container.manager import ContainerDBManager
 from commons import APIManager
 from config import config
 
@@ -11,6 +13,8 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
   def __init__(self, app):
     super(LocationAwareApplianceScheduler, self).__init__(app)
     self.__api = iRODSAPIManager()
+    self.__cluster_mgr = ClusterManager()
+    self.__contr_db = ContainerDBManager()
 
   async def schedule(self, plans):
     if not config.irods.host or not config.irods.port:
@@ -39,12 +43,21 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
       if c.id in plans:
         continue
       if c.input_data:
-        status, locs, err = await self.__api.get_replica_locations(c.input_data[0])
+        status, locations, err = await self.__api.get_replica_locations(c.input_data[0])
         if status != 200:
           self.logger.error(err)
-        else:
-          self.logger.info("Container '%s' will land on %s"%(c.id, locs[0]))
-          c.add_constraint('region', locs[0])
+          continue
+        agents = [agent for agent in
+                  await self.__cluster_mgr.find_agents(region=locations[0],ttl=0)
+                  if agent.resources.cpus >= c.resources.cpus
+                  and agent.resources.mem >= c.resources.mem
+                  and agent.resources.disk >= c.resources.disk]
+        if not agents:
+          self.logger.info("No matched agents have sufficient resources for '%s'"%c)
+          continue
+        self.logger.info("Container '%s' will land on %s"%(c.id, agents[0].hostname))
+        c.host = agents[0].hostname
+      self.__contr_db.save_container(c, False)
       new_plans += SchedulePlan(c.id, [c]),
     if new_plans:
       self.logger.info('New plans: %s'%[p.id for p in new_plans])

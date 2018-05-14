@@ -136,9 +136,9 @@ class ContainerManager(Manager):
         parsed_job = await self._parse_job_state(raw_job)
         contr.state = parsed_job['state']
     else:
-      errmsg = "Unknown container type: %s"%contr.type
-      self.logger.warn(errmsg)
-      return 404, None, "Container '%s' is not found"%contr
+      err = "Unknown container type: %s"%contr.type
+      self.logger.warn(err)
+      return 400, None, err
     return status, contr, err
 
   async def _parse_service_state(self, body):

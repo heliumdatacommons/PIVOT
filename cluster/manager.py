@@ -18,7 +18,7 @@ class ClusterManager(Manager):
       await self.__cluster_monitor.update()
     return await self.__agent_db.get_all_agents()
 
-  async def find_hosts(self, ttl=30, **kwargs):
+  async def find_agents(self, ttl=30, **kwargs):
     if self._is_cache_expired(ttl):
       await self.__cluster_monitor.update()
     return await self.__agent_db.find_agents(**kwargs)

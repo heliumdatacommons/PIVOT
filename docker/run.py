@@ -29,7 +29,7 @@ def create_pivot_config(args):
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master, port=args.port, n_parallel=args.n_parallel)
   if args.irods_host and args.irods_port:
-    pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
+    pivot_cfg['irods'] = dict(host=args.irods_host, port=args.irods_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
 def check_mongodb_port():
