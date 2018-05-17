@@ -118,7 +118,7 @@ class Job(Container):
                    for p in self.ports]
     r['container']['parameters'] = parameters
     if self.rack:
-      r.setdefault('constraints', []).append(['rack', 'EQUALS', self.rack])
+      r.setdefault('constraints', []).append(['cloud', 'EQUALS', self.rack])
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'EQUALS', self.host])
     for k, v in self.constraints:

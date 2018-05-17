@@ -85,7 +85,7 @@ class Volume:
 
   """
 
-  def __init__(self, container_path, host_path, mode):
+  def __init__(self, container_path, host_path, mode, *args, **kwargs):
     self.__container_path = container_path
     self.__host_path = host_path
     self.__mode = mode
@@ -150,7 +150,7 @@ class Endpoint:
 
   """
 
-  def __init__(self, host, container_port, host_port, protocol='tcp'):
+  def __init__(self, host, container_port, host_port, protocol='tcp', *args, **kwargs):
     self.__host = host
     self.__host_port = host_port
     self.__container_port = container_port
@@ -228,7 +228,7 @@ class Port:
 
   """
 
-  def __init__(self, container_port, host_port=0, protocol='tcp'):
+  def __init__(self, container_port, host_port=0, protocol='tcp', *args, **kwargs):
     self.__container_port = container_port
     self.__host_port = host_port
     self.__protocol = protocol
@@ -303,7 +303,7 @@ class Resources:
 
   """
 
-  def __init__(self, cpus, mem, disk=0, gpu=0):
+  def __init__(self, cpus, mem, disk=0, gpu=0, *args, **kwargs):
     self.__cpus = cpus
     self.__mem = mem
     self.__disk = disk
@@ -375,6 +375,38 @@ class Resources:
 
 
 @swagger.model
+class Data:
+  """
+  Data specifications
+
+  """
+  def __init__(self, input=[], *args, **kwargs):
+    self.__input=list(input)
+
+  @property
+  @swagger.property
+  def input(self):
+    """
+    Paths of input data objects
+    ---
+    type: list
+    items: str
+    default: []
+    example:
+      - /tempZone/rods/a.file
+      - /tempZone/rods/b.file
+
+    """
+    return list(self.__input)
+
+  def to_render(self):
+    return dict(input=self.input)
+
+  def to_save(self):
+    return self.to_render()
+
+
+@swagger.model
 class Container:
   """
   Container specifications
@@ -401,7 +433,7 @@ class Container:
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
-               dependencies=[], input_data=[], rack=None, host=None, last_update=None,
+               dependencies=[], data=None, rack=None, host=None, last_update=None,
                constraints=[], **kwargs):
     self.__id = id
     self.__appliance = appliance
@@ -424,7 +456,7 @@ class Container:
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = list(dependencies)
-    self.__input_data = list(input_data)
+    self.__data = data and Data(**data)
     self.__last_update = parse_datetime(last_update)
     self.__constraints = list(constraints)
 
@@ -676,18 +708,14 @@ class Container:
 
   @property
   @swagger.property
-  def input_data(self):
+  def data(self):
     """
-    Input data files consumed by the container
+    Data consumed by the container
     ---
-    type: list
-    items: str
-    default: []
-    example:
-      - /tempZone/rods/a.file
-      - /tempZone/rods/b.file
+    type: Data
+
     """
-    return list(self.__input_data)
+    return self.__data
 
   @property
   def last_update(self):
@@ -750,7 +778,7 @@ class Container:
                 ports=[p.to_render() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                input_data=self.input_data, rack=self.rack, host=self.host)
+                data=self.data and self.data.to_render(), rack=self.rack, host=self.host)
 
   def to_save(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
@@ -762,7 +790,7 @@ class Container:
                 ports=[p.to_save() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                input_data=self.input_data, rack=self.rack, host=self.host,
+                data=self.data and self.data.to_save(), rack=self.rack, host=self.host,
                 last_update=self.last_update and self.last_update.isoformat(),
                 constraints=self.constraints)
 

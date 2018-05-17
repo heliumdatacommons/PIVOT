@@ -165,7 +165,7 @@ class SwaggerAPIRegistry(Loggable, metaclass=Singleton):
         if m.__doc__:
           summary, method_specs = m.__doc__.split('---')
           op.summary, method_specs = _format_docstring(summary), yaml.load(method_specs)
-          request_body = method_specs.get('request_body', None)
+          request_body = method_specs.get('request_body')
           if request_body:
             op.request_body = RequestBody(Content(request_body['content']))
           for p in in_path_params:
@@ -174,7 +174,7 @@ class SwaggerAPIRegistry(Loggable, metaclass=Singleton):
             op.add_parameter(Parameter(**p, show_in=p.pop('in', None)))
           for code, r in method_specs.get('responses', {}).items():
             resp = Response(code=code, description=r.get('description', ''))
-            content = r.get('content', None)
+            content = r.get('content')
             if content:
               resp.content = Content(content)
             op.add_response(resp)

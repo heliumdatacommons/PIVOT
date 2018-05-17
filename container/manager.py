@@ -162,8 +162,8 @@ class ContainerManager(Manager):
       for t in tasks:
         hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
-        host, rack = hosts[0], hosts[0].attributes.get('rack', None)
-        public_ip = host.attributes.get('public_ip', None)
+        host, rack = hosts[0], hosts[0].attributes.get('rack')
+        public_ip = host.attributes.get('public_ip')
         if not public_ip: continue
         if 'portDefinitions' in body:
           for i, p in enumerate(body['portDefinitions']):

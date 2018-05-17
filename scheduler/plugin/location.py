@@ -42,22 +42,36 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
     for c in contrs:
       if c.id in plans:
         continue
-      if c.input_data:
-        status, locations, err = await self.__api.get_replica_locations(c.input_data[0])
-        if status != 200:
-          self.logger.error(err)
-          continue
+      if c.data:
+        regions = {}
+        for lfn in c.data.input:
+          status, data_obj, err = await self.__api.get_data_object(lfn)
+          if status != 200:
+            self.logger.error(err)
+            continue
+          for r in await self.__api.get_replica_regions(data_obj.get('replicas', [])):
+            regions[r] = regions.setdefault(r, 0) + data_obj.get('size', 0)
         agents = [agent for agent in
-                  await self.__cluster_mgr.find_agents(region=locations[0],ttl=0)
+                  await self.__cluster_mgr.find_agents(
+                    region={'$in': list(regions.keys())}, ttl=0)
                   if agent.resources.cpus >= c.resources.cpus
                   and agent.resources.mem >= c.resources.mem
                   and agent.resources.disk >= c.resources.disk]
         if agents:
-          self.logger.info("Container '%s' will land on %s"%(c.id, agents[0].hostname))
-          c.host = agents[0].hostname
+          self.logger.info('Candidate regions:')
+          for a in agents:
+            region = a.attributes.get('region')
+            cloud = a.attributes.get('cloud')
+            data_size = regions.get(region, 0)
+            self.logger.info('\t%s, %s, data size: %d'%(region, cloud, data_size))
+          agent = max(agents, key=lambda a: regions.get(a.attributes.get('region'), 0))
+          cloud, region = agent.attributes.get('cloud'), agent.attributes.get('region')
+          self.logger.info("Container '%s' will land on %s (%s, %s)"%(c.id, agent.hostname,
+                                                                      region, cloud))
+          c.host = agent.hostname
         else:
           self.logger.info("No matched agents have sufficient resources for '%s'"%c)
-      self.__contr_db.save_container(c, False)
+      await self.__contr_db.save_container(c, False)
       new_plans += SchedulePlan(c.id, [c]),
     if new_plans:
       self.logger.info('New plans: %s'%[p.id for p in new_plans])
@@ -69,14 +83,18 @@ class iRODSAPIManager(APIManager):
   def __init__(self):
     super(iRODSAPIManager, self).__init__()
 
-  async def get_replica_locations(self, lfn):
+  async def get_data_object(self, lfn):
     api = config.irods
-    endpoint = '%s/getReplicas?filename=%s'%(api.endpoint, url_escape(lfn))
-    status, replicas, err = await self.http_cli.get(api.host, api.port, endpoint)
+    endpoint = '%s/getDataObject?filename=%s'%(api.endpoint, url_escape(lfn))
+    status, data_obj, err = await self.http_cli.get(api.host, api.port, endpoint)
     if status != 200:
       return status, None, err
+    return status, data_obj, None
+
+  async def get_replica_regions(self, replicas):
+    api = config.irods
     locations = []
-    for r in replicas['replicas']:
+    for r in replicas:
       endpoint = '%s/getResourceMetadata?resource_name=%s'%(api.endpoint,
                                                             url_escape(r['resource_name']))
       status, resc, err = await self.http_cli.get(api.host, api.port, endpoint)
@@ -84,5 +102,6 @@ class iRODSAPIManager(APIManager):
         self.logger.error(err)
         continue
       locations.append(resc['region'])
-    return 200, locations, None
+    return locations
+
 
