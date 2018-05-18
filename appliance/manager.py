@@ -1,11 +1,20 @@
+import importlib
 from config import config
 from commons import MotorClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
-# from scheduler import DefaultApplianceScheduler
-from scheduler.plugin.location import LocationAwareApplianceScheduler
 from scheduler.manager import ApplianceDAGDBManager
+
+
+def get_scheduler():
+  try:
+    sched_mod = '.'.join(config.pivot.scheduler.split('.')[-1])
+    sched_class = config.pivot.scheduler.split('.')[-1]
+    return getattr(importlib.import_module(sched_mod), sched_class)
+  except:
+    from scheduler import DefaultApplianceScheduler
+    return DefaultApplianceScheduler
 
 
 class ApplianceManager(Manager):
@@ -14,6 +23,7 @@ class ApplianceManager(Manager):
     self.__app_api = ApplianceAPIManager()
     self.__contr_mgr = ContainerManager()
     self.__app_db = ApplianceDBManager()
+    self.__sched_class = get_scheduler()
 
   async def get_appliance(self, app_id):
     status, app, err = await self.__app_db.get_appliance(app_id)
@@ -51,8 +61,7 @@ class ApplianceManager(Manager):
       return status, None, err
     self.logger.info(msg)
     self.logger.info("Start monitoring appliance '%s'"%app)
-    # scheduler = DefaultApplianceScheduler(app)
-    scheduler = LocationAwareApplianceScheduler(app)
+    scheduler = self.__sched_class(app)
     status, msg, err = await scheduler.initialize()
     if status != 200:
       self.logger.error(err)

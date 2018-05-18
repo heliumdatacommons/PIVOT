@@ -66,13 +66,14 @@ class iRODSAPI(API):
     super(iRODSAPI, self).__init__(*args, **kwargs)
 
 
-
 class GeneralConfig:
 
-  def __init__(self, master, port=9090, n_parallel=1, *args, **kwargs):
+  def __init__(self, master, port=9090, n_parallel=1,
+               scheduler='scheduler.DefaultApplianceScheduler', *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel
+    self.__scheduler = scheduler
 
   @property
   def master(self):
@@ -89,6 +90,10 @@ class GeneralConfig:
   @master.setter
   def master(self, master):
     self.__master = master
+
+  @property
+  def scheduler(self):
+    return self.__scheduler
 
 
 class Configuration:
@@ -136,5 +141,6 @@ class Configuration:
   @property
   def irods(self):
     return self.__irods
+
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))

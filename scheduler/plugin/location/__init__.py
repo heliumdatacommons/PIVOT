@@ -103,5 +103,3 @@ class iRODSAPIManager(APIManager):
         continue
       locations.append(resc['region'])
     return locations
-
-
