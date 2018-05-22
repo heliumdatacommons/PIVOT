@@ -6,8 +6,15 @@ from enum import Enum
 from util import parse_datetime
 
 
+short_id_pattern = '\@([a-z0-9\.-]+)'
+
+
+def get_short_ids(p):
+  return re.compile(short_id_pattern).findall(p)
+
+
 def parse_container_short_id(p, appliance):
-  return re.sub(r'(.*)\@([a-z0-9\.-]+)(.*)',
+  return re.sub(r'(.*)%s(.*)'%short_id_pattern,
                 r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
                 str(p))
 

@@ -1,6 +1,6 @@
 import swagger
 
-from container.base import Container
+from container.base import Container, get_short_ids
 
 
 @swagger.model
@@ -29,12 +29,13 @@ class Appliance:
       containers.append(contr)
       contr_ids.add(contr.id)
     addresses = set()
-    addr_filter, addr_transform = lambda x: x and x.startswith('@'), lambda x: x[1:]
     for c in containers:
       if c.cmd:
-        addresses.update(map(addr_transform, filter(addr_filter, c.cmd.split())))
-      addresses.update(map(addr_transform, filter(addr_filter, c.args)))
-      addresses.update(map(addr_transform, filter(addr_filter, c.env.values())))
+        addresses.update(get_short_ids(c.cmd))
+      for arg in c.args:
+        addresses.update(get_short_ids(arg))
+      for v in c.env.values():
+        addresses.update(get_short_ids(v))
     undefined = list(addresses - contr_ids)
     if undefined:
       return 400, None, "Undefined container(s): %s"%undefined
