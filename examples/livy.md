@@ -160,7 +160,7 @@ curl -X GET http://<pivot-url>:<pivot-port>/appliance/spark-livy
 
 The response contains the information about the endpoints where users
 can interact with the containers. For instance, users can visit the
-Livy endpoint at http://13.58.175.56:8998 according to the endpoint
+Livy endpoint at http://13.58.175.56:23917 according to the endpoint
 information of the livy container.
 
 ```json
@@ -206,4 +206,10 @@ information of the livy container.
         }
     ]
 }
+```
+
+To delete the state of the appliance:
+
+```
+curl -X DELETE http://<pivot-url>:<pivot-port>/appliance/spark-livy
 ```
