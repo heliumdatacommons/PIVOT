@@ -6,15 +6,15 @@ from enum import Enum
 from util import parse_datetime
 
 
-short_id_pattern = '\@([a-z0-9\.-]+)'
+short_id_pattern = '(.*)\@([a-zA-Z0-9\.-]+)'
 
 
 def get_short_ids(p):
-  return re.compile(short_id_pattern).findall(p)
+  return [p2 for p1, p2 in re.compile(short_id_pattern).findall(p) if not p1]
 
 
 def parse_container_short_id(p, appliance):
-  return re.sub(r'(.*)%s(.*)'%short_id_pattern,
+  return re.sub(r'%s(.*)'%short_id_pattern,
                 r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
                 str(p))
 
@@ -791,7 +791,7 @@ class Container:
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_save(),
                 cmd=self.cmd, args=self.args, env=self.env,
-                volumes=[v.to_save() for v in self.volumes],
+                  volumes=[v.to_save() for v in self.volumes],
                 network_mode=self.network_mode.value,
                 endpoints=[e.to_save() for e in self.endpoints],
                 ports=[p.to_save() for p in self.ports],
