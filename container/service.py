@@ -139,7 +139,7 @@ class Service(Container):
 
   """
 
-  def __init__(self, instances=1, labels={}, health_checks=[], default_health_checks=True,
+  def __init__(self, instances=1, labels={}, health_checks=[], default_health_checks=False,
                minimum_capacity=1., **kwargs):
     super(Service, self).__init__(**kwargs)
     self.__instances = instances
@@ -292,6 +292,7 @@ class Service(Container):
         if p.protocol != 'tcp':
           continue
         self.add_health_check(HealthCheck(port_index=i))
+        break
 
   def _get_default_env(self):
     return dict(PIVOT_URL=parse_container_short_id('@pivot', 'sys'))

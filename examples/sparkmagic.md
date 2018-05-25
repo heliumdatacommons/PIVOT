@@ -1,10 +1,13 @@
-Running Livy with PIVOT
-=======================
-A Livy appliance consists of a Livy endpoint and a Spark cluster. The
-Spark cluster is running in the [standalone mode](https://spark.apache.org/docs/latest/spark-standalone.html),
+Running Sparkmagic, Livy and Spark with PIVOT
+=============================================
+This appliance consists of a [Jupyter notebook](http://jupyter.org/)
+container with [Sparkmagic](https://github.com/jupyter-incubator/sparkmagic),
+a [Livy](https://livy.incubator.apache.org/) endpoint and a Spark
+cluster. The Spark cluster is running in the
+[standalone mode](https://spark.apache.org/docs/latest/spark-standalone.html),
 which consists of a master and a number of workers. Hence, there are
-three containers to be created in the appliance - a Livy endpoint, a
-Spark master and an arbitrary number of Spark workers.
+four containers in the appliance - a Sparkmagic Jupyter notebook, a Livy
+endpoint, a Spark master and an arbitrary number of Spark workers.
 
 The Livy endpoint uses the `heliumdatacomons/livy` image and exposes
 port `8998` on the container for HTTP requests from users. Besides, it
@@ -37,6 +40,37 @@ allow multiple active sessions simultaneously. Otherwise the sessions
 will run out of memory very soon and exit unexpectedly without traceable
 log. It has been tested that 6 active sessions can be created with 4GB
 RAM allocated.
+
+The Sparkmagic Jupyter notebook runs on top of the Livy endpoint to
+interact with the Spark cluster underneath as specified below:
+
+```json
+{
+    "id": "sparkmagic",
+    "type": "service",
+    "network_mode": "bridge",
+    "image": "heliumdatacommons/sparkmagic",
+    "resources": {
+        "cpus": 1,
+        "mem": 2048
+    },
+    "is_privileged": true,
+    "ports": [
+      {"container_port": 8888 }
+    ],
+    "args": [
+      "--NotebookApp.token=\"\""
+    ],
+    "env": {
+        "LIVY_HOST": "@livy"
+    },
+    "dependencies": [ "livy" ]
+}
+```
+
+It  uses the `heliumdatacommons/sparkmagic` image and can read the value
+of the optional environment variable `LIVY_HOST`, so that it can set up
+the Livy endpoint in the Sparkmagic configuration.
 
 The Spark master manages all the resources on the Spark workers for
 running jobs. It exposes two ports - port `7077` for Spark messages and
@@ -175,11 +209,24 @@ information of the livy container.
     "id": "spark-livy",
     "containers": [
         {
+            "id": "sparkmagic",
+            "endpoints": [
+                {
+                    "host": "18.220.249.88",
+                    "host_port": 12094,
+                    "container_port": 8888,
+                    "protocol": "tcp"
+                }
+            ],
+            "state": "running",
+            ...
+        },
+        {
             "id": "livy",
             "endpoints": [
                 {
-                    "host": "13.58.175.56",
-                    "host_port": 23917,
+                    "host": "54.227.40.165",
+                    "host_port": 22463,
                     "container_port": 8998,
                     "protocol": "tcp"
                 }
@@ -191,14 +238,14 @@ information of the livy container.
             "id": "spark-master",
             "endpoints": [
                 {
-                    "host": "104.196.17.111",
-                    "host_port": 23165,
+                    "host": "18.220.249.88",
+                    "host_port": 12179,
                     "container_port": 8080,
                     "protocol": "tcp"
                 },
                 {
-                    "host": "104.196.17.111",
-                    "host_port": 23166,
+                    "host": "18.220.249.88",
+                    "host_port": 12180,
                     "container_port": 7077,
                     "protocol": "tcp"
                 }
@@ -220,3 +267,14 @@ To delete the state of the appliance:
 ```
 curl -X DELETE http://<pivot-url>:<pivot-port>/appliance/spark-livy
 ```
+
+The visual of the appliance can be found at
+`http://<pivot-url>:<pivot-port>/appliance/spark-livy/ui`, which looks
+as below:
+
+![spark-livy-app](images/spark-livy-app.png)
+
+Visit the Sparkmagic endpoint in the browser and then you can create
+Spark sessions.
+
+![sparkmagic](images/sparkmagic.png)
