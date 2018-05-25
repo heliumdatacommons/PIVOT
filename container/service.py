@@ -139,13 +139,13 @@ class Service(Container):
 
   """
 
-  def __init__(self, instances=1, labels={}, health_checks=[], default_health_checks=False,
+  def __init__(self, instances=1, labels={}, health_check=None, default_health_check=False,
                minimum_capacity=1., **kwargs):
     super(Service, self).__init__(**kwargs)
     self.__instances = instances
     self.__labels = dict(labels)
-    self.__health_checks = [HealthCheck(**hc) for hc in health_checks]
-    self.__default_health_checks = default_health_checks
+    self.__health_check = health_check and HealthCheck(**health_check)
+    self.__default_health_check = default_health_check
     self.__minimum_capacity = minimum_capacity
 
   @property
@@ -176,30 +176,29 @@ class Service(Container):
 
   @property
   @swagger.property
-  def health_checks(self):
+  def health_check(self):
     """
-    Health checks to be performed on the service
+    Health check to be performed on the service
     ---
-    type: list
-    items: HealthCheck
-    default: a list of HealthCheck instances with default values on every defined `Port`
+    type: HealthCheck
+    default: health check on the first defined TCP port
     example: HealthCheck
 
     """
-    return list(self.__health_checks)
+    return self.__health_check
 
   @property
   @swagger.property
-  def default_health_checks(self):
+  def default_health_check(self):
     """
-    Whether to perform default health checks on the service
+    Whether to perform default health check on the service
     ---
     type: bool
     default: true
     example: true
 
     """
-    return self.__default_health_checks
+    return self.__default_health_check
 
   @property
   @swagger.property
@@ -217,28 +216,29 @@ class Service(Container):
     """
     return self.__minimum_capacity
 
-  def add_health_check(self, hc):
-    self.__health_checks.append(hc)
+  @health_check.setter
+  def health_check(self, hc):
+    self.__health_check = hc and HealthCheck(**hc)
 
   def to_render(self):
     return dict(**super(Service, self).to_render(),
                 instances=self.instances,
                 labels=self.labels,
-                health_checks=[hc.to_render() for hc in self.health_checks],
-                default_health_checks=self.default_health_checks,
+                health_check=self.health_check.to_render() if self.health_check else None,
+                default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
 
   def to_save(self):
-    self._add_default_health_checks()
+    self._add_default_health_check()
     return dict(**super(Service, self).to_save(),
                 instances=self.instances,
                 labels=self.labels,
-                health_checks=[hc.to_save() for hc in self.health_checks],
-                default_health_checks=self.default_health_checks,
+                health_check=self.health_check.to_save() if self.health_check else None,
+                default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
 
   def to_request(self):
-    self._add_default_health_checks()
+    self._add_default_health_check()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
              env=dict(**self._get_default_env(),
@@ -252,7 +252,7 @@ class Service(Container):
                             docker=dict(image=self.image,
                                         privileged=self.is_privileged,
                                         forcePullImage=self.force_pull_image)),
-             healthChecks=[hc.to_request() for hc in self.health_checks],
+             healthChecks=[self.health_check.to_request()] if self.health_check else [],
              upgradeStrategy=dict(
                minimumHealthCapacity=self.minimum_capacity,
                maximumOverCapacity=1.))
@@ -286,12 +286,12 @@ class Service(Container):
       r.setdefault('constraints', []).append([str(k), 'CLUSTER', str(v)])
     return r
 
-  def _add_default_health_checks(self):
-    if not self.health_checks and self.default_health_checks:
+  def _add_default_health_check(self):
+    if not self.health_check and self.default_health_check:
       for i, p in enumerate(self.ports):
         if p.protocol != 'tcp':
           continue
-        self.add_health_check(HealthCheck(port_index=i))
+        self.health_check = HealthCheck(port_index=i)
         break
 
   def _get_default_env(self):
