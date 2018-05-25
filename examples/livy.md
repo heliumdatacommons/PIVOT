@@ -19,7 +19,7 @@ Spark master. The Livy endpoint container is specified as below:
     "image": "heliumdatacommons/livy",
     "resources": {
         "cpus": 1,
-        "mem": 1024
+        "mem": 4096
     },
     "network_mode": "container",
     "ports": [
@@ -31,6 +31,13 @@ Spark master. The Livy endpoint container is specified as below:
     "dependencies": [ "spark-master" ]
 }
 ```
+
+**Note:** Livy requires a minimum of 2GB RAM to function normally and
+allow multiple active sessions simultaneously. Otherwise the sessions
+will run out of memory very soon and exit unexpectedly without traceable
+log. It has been tested that 6 active sessions can be created with 4GB
+RAM allocated.
+
 The Spark master manages all the resources on the Spark workers for
 running jobs. It exposes two ports - port `7077` for Spark messages and
 port `8080` for HTTP requests. The status of the cluster can be checked
@@ -98,7 +105,7 @@ below:
             "image": "heliumdatacommons/livy",
             "resources": {
                 "cpus": 1,
-                "mem": 1024
+                "mem": 4096
             },
             "network_mode": "container",
             "ports": [
