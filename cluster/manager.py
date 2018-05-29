@@ -152,12 +152,12 @@ class ClusterAPIManager(APIManager):
                - h['reserved_resources'].get(type, 0))
 
     agents = [Agent(hostname=h['hostname'],
-                   resources=AgentResources(calc_available_resource(h, 'cpus'),
+                    resources=AgentResources(calc_available_resource(h, 'cpus'),
                                             calc_available_resource(h, 'mem'),
                                             calc_available_resource(h, 'disk'),
                                             calc_available_resource(h, 'gpus'),
                                             calc_available_resource(h, 'ports')),
-                   attributes=h['attributes'])
+                    attributes=h['attributes'])
              for h in body['slaves']]
     return status, agents, None
 

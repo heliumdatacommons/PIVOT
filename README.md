@@ -63,7 +63,7 @@ The request body for deploying PIVOT on Marathon is as below:
     }
   ],
   "upgradeStrategy": {
-    "minimumHealthCapacity": 0.5,
+    "minimumHealthCapacity": 0,
     "maximumOverCapacity": 0
   },
   "labels": {
@@ -80,7 +80,10 @@ With curl, the deployment command is as below (assuming the request body
 is saved to a file named `pivot.json`):
 
 ```shell
-curl -X POST -d @pivot.json http://<marathon-host>:<marathon-port>/v2/apps
+curl -X PUT \
+    -H "Content-Type: application/json"  \
+    -d @pivot.json \
+    http://<marathon-host>:<marathon-port>/v2/apps
 ```
 
 **Note:** The Marathon endpoint is typically protected behind a firewall
@@ -89,3 +92,20 @@ to deploy PIVOT, you need to ask the administrator of the DC/OS
 cluster to either punch a hole on the firewall for you do the deployment
 remotely, or add you as a SSH user to one of the masters to deploy it
 locally.
+
+To pin the service onto a specific node, add the `constraints` field in
+the request body as below:
+
+```json
+{
+  ...
+  "constraints": [
+    [ "hostname", "CLUSTER", "10.52.100.4"]
+  ]
+  ...
+}
+```
+
+**Note:** that the hostname is just the private IP address of the DC/OS
+agent where PIVOT will land, since DC/OS identifies the agents by their
+private IP addresses.
