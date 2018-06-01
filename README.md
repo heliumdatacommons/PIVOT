@@ -109,3 +109,9 @@ the request body as below:
 **Note:** that the hostname is just the private IP address of the DC/OS
 agent where PIVOT will land, since DC/OS identifies the agents by their
 private IP addresses.
+
+
+### Tutorials
+1. [Running CWL Workflow Launcher](examples/cwl.md)
+2. [Running Sparkmagic, Livy and Spark](examples/sparkmagic.md)
+3. [Running Containerized Mesos Cluster](examples/mesos.md)

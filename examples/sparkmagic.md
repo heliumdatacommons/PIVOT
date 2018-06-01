@@ -1,5 +1,5 @@
-Running Sparkmagic, Livy and Spark with PIVOT
-=============================================
+Running Sparkmagic, Livy and Spark
+==================================
 This appliance consists of a [Jupyter notebook](http://jupyter.org/)
 container with [Sparkmagic](https://github.com/jupyter-incubator/sparkmagic),
 a [Livy](https://livy.incubator.apache.org/) endpoint and a Spark

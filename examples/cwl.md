@@ -1,5 +1,5 @@
-Run CWL Workflow Launcher on PIVOT
-==================================
+Running CWL Workflow Launcher
+=============================
 Running a CWL workflow calls for three components - a TOIL instance that
 orchestrates the workflow jobs, a Chronos framework for running the
 workflow jobs and a Zookeeper instance for keeping Chronos states.
