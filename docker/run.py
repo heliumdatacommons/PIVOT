@@ -19,6 +19,7 @@ def parse_args():
   parser.add_argument('--n_parallel', dest='n_parallel', type=int,
                       default=multiprocessing.cpu_count(),
                       help='PIVOT parallelism level')
+  parser.add_argument('--ha', action='store_true', help='Turn on HA mode')
   parser.add_argument('--irods_api_host', dest='irods_api_host', type=str, help='iRODS API host')
   parser.add_argument('--irods_api_port', dest='irods_api_port', type=int, help='iRODS API port')
   return parser.parse_args()
@@ -27,14 +28,17 @@ def parse_args():
 def create_pivot_config(args):
   pivot_cfg_f = '/opt/pivot/config.yml'
   pivot_cfg = yaml.load(open(pivot_cfg_f))
-  pivot_cfg['pivot'].update(master=args.master, port=args.port, n_parallel=args.n_parallel)
+  pivot_cfg['pivot'].update(master=args.master, port=args.port,
+                            n_parallel=args.n_parallel, ha=args.ha)
   if args.irods_api_host and args.irods_api_port:
     pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
+
 def check_mongodb_port():
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
   return sock.connect_ex(('127.0.0.1', 27017)) == 0
+
 
 def run_pivot():
   try:

@@ -4,6 +4,7 @@ pivot:
   port: 9090
   n_parallel: 8
   scheduler: schedule.plugin.location.LocationAwareApplianceScheduler
+  ha: false
 mesos:
   port: 5050
 marathon:

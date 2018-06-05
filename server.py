@@ -31,7 +31,8 @@ def start_server():
   server = tornado.httpserver.HTTPServer(app)
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
-  tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
+  if config.pivot.ha:
+    tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
   tornado.ioloop.IOLoop.instance().start()
 
 
