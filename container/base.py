@@ -6,15 +6,15 @@ from enum import Enum
 from util import parse_datetime
 
 
-short_id_pattern = '(.*)\@([a-zA-Z0-9\.-]+)'
+short_id_pattern = r'@([a-zA-Z0-9\.-]+)'
 
 
 def get_short_ids(p):
-  return [p2 for p1, p2 in re.compile(short_id_pattern).findall(p) if not p1]
+  return [p2 for p1, p2 in re.compile(short_id_pattern).findall(p) if not p1] if p else []
 
 
 def parse_container_short_id(p, appliance):
-  return re.sub(r'%s(.*)'%short_id_pattern,
+  return re.sub(r'([^@]*)%s([^@]*)'%short_id_pattern,
                 r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
                 str(p))
 
@@ -435,7 +435,7 @@ class Container:
     if data['type'] == ContainerType.JOB.value:
       from container.job import Job
       return 200, Job(**data), None
-    return 422, 'Unknown container type: %s'%data['type']
+    return 422, 'Unknown container type: %s'%data['type'], None
 
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
@@ -447,11 +447,11 @@ class Container:
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
     self.__image = image
     self.__resources = Resources(**resources)
-    self.__cmd = cmd
-    self.__args = list(args)
+    self.__cmd = cmd and str(cmd)
+    self.__args = [a and str(a) for a in args]
     if self.__cmd and self.__args:
       raise ValueError("Cannot specify both 'cmd' and 'args'")
-    self.__env = dict(env)
+    self.__env = {k: v and str(v) for k, v in env.items()}
     self.__volumes = [Volume(**v) for v in volumes]
     self.__network_mode = network_mode if isinstance(network_mode, NetworkMode) \
                       else NetworkMode(network_mode.upper())
