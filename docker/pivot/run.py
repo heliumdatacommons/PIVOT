@@ -19,9 +19,17 @@ def parse_args():
   parser.add_argument('--n_parallel', dest='n_parallel', type=int,
                       default=multiprocessing.cpu_count(),
                       help='PIVOT parallelism level')
+  parser.add_argument('--db_host', dest='db_host', type=str,
+                      default='pivot-db-sys.marathon.containerip.dcos.thisdcos.directory',
+                      help='MongoDB host')
+  parser.add_argument('--db_port', dest='db_port', type=int, default=27017,
+                      help='MongoDB listen port')
   parser.add_argument('--ha', action='store_true', help='Turn on HA mode')
-  parser.add_argument('--irods_api_host', dest='irods_api_host', type=str, help='iRODS API host')
-  parser.add_argument('--irods_api_port', dest='irods_api_port', type=int, help='iRODS API port')
+  parser.add_argument('--irods_api_host', dest='irods_api_host',
+                      type=str, help='iRODS API host')
+  parser.add_argument('--irods_api_port', dest='irods_api_port',
+                      type=int, help='iRODS API port')
+
   return parser.parse_args()
 
 
@@ -30,21 +38,20 @@ def create_pivot_config(args):
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master, port=args.port,
                             n_parallel=args.n_parallel, ha=args.ha)
+  pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port)
   if args.irods_api_host and args.irods_api_port:
     pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
 
-def check_mongodb_port():
+def check_mongodb_port(args):
   sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-  return sock.connect_ex(('127.0.0.1', 27017)) == 0
+  return sock.connect_ex((args.db_host, args.db_port)) == 0
 
 
-def run_pivot():
+def run_pivot(args):
   try:
-    subprocess.run('/etc/init.d/mongodb start', shell=True, check=True,
-                   stdout=sys.stdout, stderr=sys.stderr)
-    while not check_mongodb_port():
+    while not check_mongodb_port(args):
       sys.stdout.write('Wait for MongoDB\n')
       sys.stdout.flush()
       time.sleep(3)
@@ -59,6 +66,6 @@ def run_pivot():
 if __name__ == '__main__':
   args = parse_args()
   create_pivot_config(args)
-  run_pivot()
+  run_pivot(args)
 
 

@@ -9,6 +9,7 @@ from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
 
 from util import error, dirname
+from config import config
 
 
 class Singleton(type):
@@ -40,7 +41,7 @@ class Loggable(object):
 class MotorClient(motor.motor_tornado.MotorClient, metaclass=Singleton):
 
   def __init__(self, *args, **kargs):
-    super(MotorClient, self).__init__(*args, **kargs)
+    super(MotorClient, self).__init__(config.db.host, config.db.port, *args, **kargs)
 
 
 class AsyncHttpClientWrapper(Loggable):

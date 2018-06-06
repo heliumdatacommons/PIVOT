@@ -1,3 +1,4 @@
+import sys
 import yaml
 
 from util import dirname
@@ -69,11 +70,13 @@ class iRODSAPI(API):
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
-               scheduler='scheduler.DefaultApplianceScheduler', *args, **kwargs):
+               scheduler='scheduler.DefaultApplianceScheduler', ha=False,
+               *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel
     self.__scheduler = scheduler
+    self.__ha = ha
 
   @property
   def master(self):
@@ -95,23 +98,55 @@ class GeneralConfig:
   def scheduler(self):
     return self.__scheduler
 
+  @property
+  def ha(self):
+    return self.__ha
+
+
+class DatabaseConfig:
+
+  def __init__(self, host, port, *args, **kwargs):
+    self.__host = host
+    self.__port = port
+
+  @property
+  def host(self):
+    return self.__host
+
+  @property
+  def port(self):
+    return self.__port
+
 
 class Configuration:
 
   @classmethod
   def read_config(cls, cfg_file_path):
     cfg = yaml.load(open(cfg_file_path))
-    pivot_cfg = GeneralConfig(**cfg.get('pivot', {}))
+    try:
+      pivot_cfg = GeneralConfig(**cfg.get('pivot', {}))
+    except Exception as e:
+      sys.stderr.write(str(e))
+      sys.stderr.write('PIVOT configuration is not set correctly\n')
+      sys.exit(1)
+    try:
+      db_cfg = DatabaseConfig(**cfg.get('db', {}))
+    except Exception as e:
+      sys.stderr.write(str(e))
+      sys.stderr.write('Database configuration is not set correctly\n')
+      sys.exit(2)
     return Configuration(pivot=pivot_cfg,
+                         db=db_cfg,
                          mesos=MesosAPI(**cfg.get('mesos', {})),
                          marathon=MarathonAPI(**cfg.get('marathon', {})),
                          chronos=ChronosAPI(**cfg.get('chronos', {})),
                          exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})),
                          irods=iRODSAPI(**cfg.get('irods', {})))
 
-  def __init__(self, pivot, mesos=None, marathon=None, chronos=None,
-               exhibitor=None, irods=None):
+  def __init__(self, pivot, db, mesos=None, marathon=None, chronos=None,
+               exhibitor=None, irods=None, *args, **kwargs):
     self.__pivot = pivot
+    self.__db = db
     self.__mesos = mesos
     self.__marathon = marathon
     self.__chronos = chronos
@@ -121,6 +156,10 @@ class Configuration:
   @property
   def pivot(self):
     return self.__pivot
+
+  @property
+  def db(self):
+    return self.__db
 
   @property
   def mesos(self):
