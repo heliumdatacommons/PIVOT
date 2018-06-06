@@ -90,7 +90,7 @@ shown below:
     },
     "network_mode": "container",
     "ports": [
-        { "container_port": 8080 }
+        { "container_port": 8080 },
         { "container_port": 7077 }
     ]
 }
@@ -160,7 +160,7 @@ below:
             },
             "network_mode": "container",
             "ports": [
-                { "container_port": 8080 }
+                { "container_port": 8080 },
                 { "container_port": 7077 }
             ]
         },
