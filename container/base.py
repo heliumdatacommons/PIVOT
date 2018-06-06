@@ -10,7 +10,7 @@ short_id_pattern = r'@([a-zA-Z0-9\.-]+)'
 
 
 def get_short_ids(p):
-  return [p2 for p1, p2 in re.compile(short_id_pattern).findall(p) if not p1] if p else []
+  return re.compile(short_id_pattern).findall(p) if p else []
 
 
 def parse_container_short_id(p, appliance):
