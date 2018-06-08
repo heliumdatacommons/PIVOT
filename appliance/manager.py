@@ -1,4 +1,6 @@
+import sys
 import importlib
+
 from config import config
 from commons import MotorClient, AutonomousMonitor
 from commons import Manager, APIManager
@@ -9,10 +11,11 @@ from scheduler.manager import ApplianceDAGDBManager
 
 def get_scheduler():
   try:
-    sched_mod = '.'.join(config.pivot.scheduler.split('.')[-1])
+    sched_mod = '.'.join(config.pivot.scheduler.split('.')[:-1])
     sched_class = config.pivot.scheduler.split('.')[-1]
     return getattr(importlib.import_module(sched_mod), sched_class)
-  except:
+  except Exception as e:
+    sys.stderr.write(str(e) + '\n')
     from scheduler import DefaultApplianceScheduler
     return DefaultApplianceScheduler
 
@@ -24,6 +27,7 @@ class ApplianceManager(Manager):
     self.__contr_mgr = ContainerManager()
     self.__app_db = ApplianceDBManager()
     self.__sched_class = get_scheduler()
+    self.logger.info('Scheduler: %s'%self.__sched_class.__name__)
 
   async def get_appliance(self, app_id):
     status, app, err = await self.__app_db.get_appliance(app_id)

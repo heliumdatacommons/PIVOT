@@ -1,6 +1,6 @@
 from ubuntu:xenial
 
-ARG GET_PIP_URL=https://bootstrap.pypa.io/get-pip.py
+ENV GET_PIP_URL https://bootstrap.pypa.io/get-pip.py
 
 # install python3.6
 RUN apt-get update \
@@ -16,3 +16,8 @@ RUN apt-get update \
     && rm -f get-pip.py \
     && apt-get -y autoremove \
     && apt-get autoclean
+
+COPY requirement.txt requirement.txt
+
+RUN pip install --no-cache-dir -r requirement.txt \
+    && rm -f requirement.txt

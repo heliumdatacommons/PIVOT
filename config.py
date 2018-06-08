@@ -132,7 +132,7 @@ class Configuration:
     try:
       db_cfg = DatabaseConfig(**cfg.get('db', {}))
     except Exception as e:
-      sys.stderr.write(str(e))
+      sys.stderr.write(str(e) + '\n')
       sys.stderr.write('Database configuration is not set correctly\n')
       sys.exit(2)
     return Configuration(pivot=pivot_cfg,

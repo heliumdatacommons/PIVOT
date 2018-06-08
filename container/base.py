@@ -388,7 +388,7 @@ class Data:
 
   """
   def __init__(self, input=[], *args, **kwargs):
-    self.__input=list(input)
+    self.__input = list(input)
 
   @property
   @swagger.property
@@ -434,14 +434,17 @@ class Container:
       return 200, Service(**data), None
     if data['type'] == ContainerType.JOB.value:
       from container.job import Job
-      return 200, Job(**data), None
+      try:
+        return 200, Job(**data), None
+      except ValueError as e:
+        return 400, None, str(e)
     return 422, 'Unknown container type: %s'%data['type'], None
 
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
                dependencies=[], data=None, rack=None, host=None, last_update=None,
-               constraints=[], **kwargs):
+               constraints={}, *aargs, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -465,7 +468,7 @@ class Container:
     self.__dependencies = list(dependencies)
     self.__data = data and Data(**data)
     self.__last_update = parse_datetime(last_update)
-    self.__constraints = list(constraints)
+    self.__constraints = {k: v and str(v) for k, v in constraints.items()}
 
   @property
   @swagger.property
@@ -730,7 +733,7 @@ class Container:
 
   @property
   def constraints(self):
-    return list(self.__constraints)
+    return dict(self.__constraints)
 
   @image.setter
   def image(self, image):
@@ -791,7 +794,7 @@ class Container:
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_save(),
                 cmd=self.cmd, args=self.args, env=self.env,
-                  volumes=[v.to_save() for v in self.volumes],
+                volumes=[v.to_save() for v in self.volumes],
                 network_mode=self.network_mode.value,
                 endpoints=[e.to_save() for e in self.endpoints],
                 ports=[p.to_save() for p in self.ports],

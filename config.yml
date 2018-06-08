@@ -3,8 +3,11 @@ pivot:
   master: m1.dcos
   port: 9090
   n_parallel: 8
-  scheduler: schedule.plugin.location.LocationAwareApplianceScheduler
+  scheduler: scheduler.plugin.location.LocationAwareApplianceScheduler
   ha: false
+db:
+  host: localhost
+  port: 27017
 mesos:
   port: 5050
 marathon:

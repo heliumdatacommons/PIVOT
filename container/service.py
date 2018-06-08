@@ -251,7 +251,11 @@ class Service(Container):
                             volumes=[v.to_request() for v in self.volumes],
                             docker=dict(image=self.image,
                                         privileged=self.is_privileged,
-                                        forcePullImage=self.force_pull_image)),
+                                        forcePullImage=self.force_pull_image,
+                                        parameters=[
+                                          dict(key='rm', value='true'),
+                                          dict(key='oom-kill-disable', value='true')]
+                                        )),
              healthChecks=[self.health_check.to_request()] if self.health_check else [],
              upgradeStrategy=dict(
                minimumHealthCapacity=self.minimum_capacity,
@@ -282,7 +286,7 @@ class Service(Container):
       r.setdefault('constraints', []).append(['cloud', 'CLUSTER', self.rack])
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'CLUSTER', self.host])
-    for k, v in self.constraints:
+    for k, v in self.constraints.items():
       r.setdefault('constraints', []).append([str(k), 'CLUSTER', str(v)])
     return r
 

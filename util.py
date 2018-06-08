@@ -19,4 +19,3 @@ def parse_datetime(d):
     return dateutil.parser.parse(d)
   return d
 
-

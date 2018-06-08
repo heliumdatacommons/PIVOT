@@ -100,7 +100,7 @@ class Job(Container):
              command = self.cmd if self.cmd else '',
              environmentVariables=[dict(name=k,
                                         value=parse_container_short_id(v, self.appliance))
-                                   for k, v in self.env.items()],
+                                   for k, v in self.env.items()] + self._get_default_env(),
              container=dict(type='DOCKER',
                             image=self.image,
                             network=self.network_mode.value,
@@ -112,7 +112,11 @@ class Job(Container):
     if self.cmd:
       r['command'] = ' '.join([parse_container_short_id(p, self.appliance)
                                for p in self.cmd.split()])
-    parameters = [dict(key='privileged', value=self.is_privileged)]
+    parameters = [
+      dict(key='privileged', value=self.is_privileged),
+      dict(key='rm', value='true'),
+      dict(key='oom-kill-disable', value='true')
+    ]
     parameters += [dict(key='publish',
                         value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))
                    for p in self.ports]
@@ -121,9 +125,12 @@ class Job(Container):
       r.setdefault('constraints', []).append(['cloud', 'EQUALS', self.rack])
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'EQUALS', self.host])
-    for k, v in self.constraints:
+    for k, v in self.constraints.items():
       r.setdefault('constraints', []).append([str(k), 'EQUALS', str(v)])
     return r
+
+  def _get_default_env(self):
+    return [dict(name='PIVOT_URL', value=parse_container_short_id('@pivot', 'sys'))]
 
   def __str__(self):
     return '%s.%s'%(self.appliance, self.id)
