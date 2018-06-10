@@ -182,8 +182,9 @@ class ContainerManager(Manager):
     ### for jobs.
     assert isinstance(body, dict)
     state = body['state'].lower().strip('1 ')
-    if body['status'] in ('success', 'failure'):
-      state = body['status']
+    if body['status'] == 'success':
+      repeats_left = int(body['schedule'].split('/')[0].strip('R'))
+      state = 'running' if repeats_left > 0 else body['status']
     state = dict(running=ContainerState.RUNNING,
                  success=ContainerState.SUCCESS,
                  failure=ContainerState.FAILED,

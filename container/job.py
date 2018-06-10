@@ -98,6 +98,7 @@ class Job(Container):
              cpus=self.resources.cpus, mem=self.resources.mem, disk=self.resources.disk,
              shell=not self.args,
              command = self.cmd if self.cmd else '',
+             retries=self.retries,
              environmentVariables=[dict(name=k,
                                         value=parse_container_short_id(v, self.appliance))
                                    for k, v in self.env.items()] + self._get_default_env(),
