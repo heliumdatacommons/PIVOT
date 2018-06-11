@@ -183,7 +183,8 @@ class ContainerManager(Manager):
     assert isinstance(body, dict)
     state = body['state'].lower().strip('1 ')
     if body['status'] == 'success':
-      repeats_left = int(body['schedule'].split('/')[0].strip('R'))
+      repeats_left = body['schedule'].split('/')[0].strip('R')
+      repeats_left = int(repeats_left) if repeats_left else 0
       state = 'running' if repeats_left > 0 else body['status']
     state = dict(running=ContainerState.RUNNING,
                  success=ContainerState.SUCCESS,
