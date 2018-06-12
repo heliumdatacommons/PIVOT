@@ -11,6 +11,7 @@ class Appliance:
   """
 
   REQUIRED = frozenset(['id', 'containers'])
+  ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
   def parse(cls, data):

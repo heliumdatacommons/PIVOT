@@ -6,19 +6,6 @@ from enum import Enum
 from util import parse_datetime
 
 
-short_id_pattern = r'@([a-zA-Z0-9\.-]+)'
-
-
-def get_short_ids(p):
-  return re.compile(short_id_pattern).findall(p) if p else []
-
-
-def parse_container_short_id(p, appliance):
-  return re.sub(r'([^@]*)%s([^@]*)'%short_id_pattern,
-                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
-                str(p))
-
-
 @swagger.enum
 class ContainerType(Enum):
   """
@@ -420,7 +407,8 @@ class Container:
 
   """
 
-  REQUIRED=frozenset(['id', 'type', 'image', 'resources'])
+  REQUIRED = frozenset(['id', 'type', 'image', 'resources'])
+  ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
   def parse(cls, data):
@@ -812,3 +800,15 @@ class Container:
             and self.id == other.id \
             and self.appliance == other.appliance
 
+
+short_id_pattern = r'@(%s)'%Container.ID_PATTERN
+
+
+def get_short_ids(p):
+  return re.compile(short_id_pattern).findall(p) if p else []
+
+
+def parse_container_short_id(p, appliance):
+  return re.sub(r'([^@]*)%s([^@]*)'%short_id_pattern,
+                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
+                str(p))

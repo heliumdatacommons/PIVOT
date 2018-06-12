@@ -2,6 +2,8 @@ import tornado
 
 from tornado.web import Application, StaticFileHandler
 
+from appliance.base import Appliance
+from container.base import Container
 from cluster.handler import ClusterInfoHandler
 from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
@@ -18,12 +20,13 @@ def start_server():
     (r'/ping', PingHandler),
     (r'/cluster', ClusterInfoHandler),
     (r'/appliance', AppliancesHandler),
-    (r'/appliance/([a-z0-9-]+\/*)', ApplianceHandler),
-    (r'/appliance/([a-z0-9-]+\/*)/container',ContainersHandler),
-    (r'/appliance/([a-z0-9-]+\/*)/service',ServicesHandler),
-    (r'/appliance/([a-z0-9-]+\/*)/job',JobsHandler),
-    (r'/appliance/([a-z0-9-]+\/*)/container/([a-z0-9-]+\/*)', ContainerHandler),
-    (r'/appliance/([a-z0-9-]+\/*)/ui', ApplianceUIHandler),
+    (r'/appliance/(%s\/*)'%Appliance.ID_PATTERN, ApplianceHandler),
+    (r'/appliance/(%s\/*)/container'%Appliance.ID_PATTERN, ContainersHandler),
+    (r'/appliance/(%s\/*)/service'%Appliance.ID_PATTERN, ServicesHandler),
+    (r'/appliance/(%s\/*)/job'%Container.ID_PATTERN, JobsHandler),
+    (r'/appliance/(%s\/*)/ui'%Appliance.ID_PATTERN, ApplianceUIHandler),
+    (r'/appliance/(%s\/*)/container/(%s\/*)'%(Appliance.ID_PATTERN,
+                                              Container.ID_PATTERN), ContainerHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
     (r'/api', SwaggerAPIHandler),
     (r'/api/ui', SwaggerUIHandler),
@@ -31,8 +34,7 @@ def start_server():
   server = tornado.httpserver.HTTPServer(app)
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
-  if config.pivot.ha:
-    tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
+  tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
   tornado.ioloop.IOLoop.instance().start()
 
 
