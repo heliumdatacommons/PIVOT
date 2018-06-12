@@ -2,7 +2,7 @@ import datetime
 
 from config import config
 from cluster.base import Master, Agent, AgentResources
-from commons import MotorClient, AutonomousMonitor
+from commons import MongoClient, AutonomousMonitor
 from commons import APIManager, Manager
 
 
@@ -178,7 +178,7 @@ class ClusterAPIManager(APIManager):
 class MasterDBManager(Manager):
 
   def __init__(self):
-    self.__master_col = MotorClient().requester.master
+    self.__master_col = MongoClient()[config.db.name].master
 
   async def get_masters(self):
     return [Master(**m) async for m in self.__master_col.find()]
@@ -195,7 +195,7 @@ class MasterDBManager(Manager):
 class AgentDBManager(Manager):
 
   def __init__(self):
-    self.__agent_col = MotorClient().requester.agent
+    self.__agent_col = MongoClient()[config.db.name].agent
 
   async def get_all_agents(self):
     return [Agent(**a, resources=AgentResources(**a.pop('resources', None)))

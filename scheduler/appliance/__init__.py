@@ -1,7 +1,7 @@
 from abc import ABCMeta, abstractmethod
 
-from scheduler.base import ApplianceDAG, SchedulePlan
-from scheduler.manager import SchedulerManager
+from scheduler.appliance.base import ApplianceDAG, SchedulePlan
+from scheduler.appliance.manager import SchedulerManager
 
 from commons import AutonomousMonitor
 

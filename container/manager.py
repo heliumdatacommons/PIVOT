@@ -3,7 +3,7 @@ import datetime
 
 from datetime import timedelta
 
-from commons import MotorClient
+from commons import MongoClient
 from commons import APIManager, Manager
 from container.base import Container, ContainerType, ContainerState, Endpoint, Deployment
 from cluster.manager import AgentDBManager
@@ -271,7 +271,7 @@ class JobAPIManager(APIManager):
 class ContainerDBManager(Manager):
 
   def __init__(self):
-    self.__contr_col = MotorClient().requester.container
+    self.__contr_col = MongoClient()[config.db.name].container
 
   async def get_container_by_virtual_ip_address(self, ip_addr):
     return await self._get_container(**{'deployment.ip_addresses': ip_addr})

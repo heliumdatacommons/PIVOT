@@ -1,22 +1,24 @@
 import sys
 import json
-import motor
 import logging
 import tornado
 
 from abc import ABCMeta, abstractmethod
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
+from motor.motor_tornado import MotorClient, MotorDatabase
 
 from util import error, dirname
 from config import config
 
 
 class Singleton(type):
+
     _instances = {}
+
     def __call__(cls, *args, **kwargs):
         if cls not in cls._instances:
-            cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
+          cls._instances[cls] = super(Singleton, cls).__call__(*args, **kwargs)
         return cls._instances[cls]
 
 
@@ -38,10 +40,10 @@ class Loggable(object):
     return logger
 
 
-class MotorClient(motor.motor_tornado.MotorClient, metaclass=Singleton):
+class MongoClient(MotorClient, metaclass=Singleton):
 
-  def __init__(self, *args, **kargs):
-    super(MotorClient, self).__init__(config.db.host, config.db.port, *args, **kargs)
+  def __init__(self, *args, **kwargs):
+    super(MongoClient, self).__init__(config.db.host, config.db.port, *args, **kwargs)
 
 
 class AsyncHttpClientWrapper(Loggable):

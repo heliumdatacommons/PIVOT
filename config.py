@@ -70,8 +70,8 @@ class iRODSAPI(API):
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
-               scheduler='scheduler.DefaultApplianceScheduler', ha=False,
-               *args, **kwargs):
+               scheduler='scheduler.appliance.DefaultApplianceScheduler',
+               ha=False, *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel
@@ -105,9 +105,10 @@ class GeneralConfig:
 
 class DatabaseConfig:
 
-  def __init__(self, host, port, *args, **kwargs):
+  def __init__(self, host, port, name, *args, **kwargs):
     self.__host = host
     self.__port = port
+    self.__name = name
 
   @property
   def host(self):
@@ -116,6 +117,10 @@ class DatabaseConfig:
   @property
   def port(self):
     return self.__port
+
+  @property
+  def name(self):
+    return self.__name
 
 
 class Configuration:

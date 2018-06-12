@@ -2,11 +2,11 @@ import sys
 import importlib
 
 from config import config
-from commons import MotorClient, AutonomousMonitor
+from commons import MongoClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
-from scheduler.manager import ApplianceDAGDBManager
+from scheduler.appliance.manager import ApplianceDAGDBManager
 
 
 def get_scheduler():
@@ -120,7 +120,7 @@ class ApplianceAPIManager(APIManager):
 class ApplianceDBManager(Manager):
 
   def __init__(self):
-    self.__app_col = MotorClient().requester.appliance
+    self.__app_col = MongoClient()[config.db.name].appliance
 
   async def get_appliances(self, **filters):
     return 200, [Appliance(**app) async for app in self.__app_col.find(filters)], None

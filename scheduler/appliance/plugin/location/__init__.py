@@ -1,7 +1,7 @@
 from tornado.escape import url_escape
 
-from scheduler import DefaultApplianceScheduler
-from scheduler.base import SchedulePlan
+from scheduler.appliance import DefaultApplianceScheduler
+from scheduler.appliance.base import SchedulePlan
 from cluster.manager import ClusterManager
 from container.manager import ContainerDBManager
 from commons import APIManager

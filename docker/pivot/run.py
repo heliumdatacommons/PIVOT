@@ -24,6 +24,8 @@ def parse_args():
                       help='MongoDB host')
   parser.add_argument('--db_port', dest='db_port', type=int, default=27017,
                       help='MongoDB listen port')
+  parser.add_argument('--db_name', dest='db_name', type=str, default='pivot',
+                      help='Database name')
   parser.add_argument('--ha', action='store_true', help='Turn on HA mode')
   parser.add_argument('--irods_api_host', dest='irods_api_host',
                       type=str, help='iRODS API host')
@@ -38,7 +40,7 @@ def create_pivot_config(args):
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master, port=args.port,
                             n_parallel=args.n_parallel, ha=args.ha)
-  pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port)
+  pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port, name=args.db_name)
   if args.irods_api_host and args.irods_api_port:
     pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)

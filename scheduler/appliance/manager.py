@@ -1,7 +1,8 @@
-from scheduler.base import ApplianceDAG
+from scheduler.appliance.base import ApplianceDAG
 from appliance.base import Appliance
 from container.manager import ContainerDBManager
-from commons import Manager, MotorClient
+from commons import Manager, MongoClient
+from config import config
 
 
 class SchedulerManager(Manager):
@@ -28,7 +29,7 @@ class SchedulerManager(Manager):
 class ApplianceDAGDBManager(Manager):
 
   def __init__(self):
-    self.__dag_col = MotorClient().requester.dag
+    self.__dag_col = MongoClient()[config.db.name].dag
 
   async def get_appliance_dag(self, app_id):
     dag = await self.__dag_col.find_one(dict(appliance=app_id))
