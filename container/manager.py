@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from commons import MotorClient
 from commons import APIManager, Manager
-from container.base import Container, ContainerType, ContainerState, Endpoint
+from container.base import Container, ContainerType, ContainerState, Endpoint, Deployment
 from cluster.manager import AgentDBManager
 from config import config
 
@@ -130,6 +130,7 @@ class ContainerManager(Manager):
         parsed_srv = await self._parse_service_state(raw_service)
         contr.state, contr.endpoints = parsed_srv['state'], parsed_srv['endpoints']
         contr.rack, contr.host = parsed_srv['rack'], parsed_srv['host']
+        contr.deployment = parsed_srv['deployment']
     elif contr.type == ContainerType.JOB:
       status, raw_job, err = await self.__job_api.get_job_update(contr)
       if not err:
@@ -157,9 +158,10 @@ class ContainerManager(Manager):
         else:
           state = ContainerState.FAILED
     # parse endpoints
-    endpoints, rack, host = [], None, None
+    endpoints, deployment, rack, host = [], Deployment(), None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
+        # parse endpoints
         hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
         host, rack = hosts[0], hosts[0].attributes.get('cloud')
@@ -172,9 +174,16 @@ class ContainerManager(Manager):
           for i, p in enumerate(body['container']['portMappings']):
             endpoints += [Endpoint(public_ip, p['containerPort'], t['ports'][i],
                                    p['protocol'])]
+
+        # parse virtual IP addresses
+        for ip in t['ipAddresses']:
+          if ip['protocol'] != 'IPv4':
+            continue
+          deployment.add_ip_address(ip['ipAddress'])
     _, appliance, id = body['id'].split('/')
     return dict(id=id, appliance=appliance, state=state,
-                rack=rack, host=host and host.hostname, endpoints=endpoints)
+                rack=rack, host=host and host.hostname,
+                endpoints=endpoints, deployment=deployment)
 
   async def _parse_job_state(self, body):
     ### TO BE IMPORVED: currently the body is the output of the job summary due to
@@ -264,11 +273,11 @@ class ContainerDBManager(Manager):
   def __init__(self):
     self.__contr_col = MotorClient().requester.container
 
+  async def get_container_by_virtual_ip_address(self, ip_addr):
+    return await self._get_container(**{'deployment.ip_addresses': ip_addr})
+
   async def get_container(self, app_id, contr_id):
-    contr = await self.__contr_col.find_one(dict(id=contr_id, appliance=app_id))
-    if not contr:
-      return 404, None, "Container '%s' is not found"%contr_id
-    return Container.parse(contr)
+    return await self._get_container(id=contr_id, appliance=app_id)
 
   async def get_containers(self, **filters):
     return [Container.parse(c)[1] async for c in self.__contr_col.find(filters)]
@@ -285,3 +294,8 @@ class ContainerDBManager(Manager):
     await self.__contr_col.delete_many(filters)
     return 200, "Containers matching '%s' have been deleted"%filters, None
 
+  async def _get_container(self, **filters):
+    contr = await self.__contr_col.find_one(filters)
+    if not contr:
+      return 404, None, 'Container matches %s is not found'%filters
+    return Container.parse(contr)

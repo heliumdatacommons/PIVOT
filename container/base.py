@@ -432,7 +432,7 @@ class Container:
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
                dependencies=[], data=None, rack=None, host=None, last_update=None,
-               constraints={}, *aargs, **kwargs):
+               constraints={}, deployment=None, *aargs, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -457,6 +457,7 @@ class Container:
     self.__data = data and Data(**data)
     self.__last_update = parse_datetime(last_update)
     self.__constraints = {k: v and str(v) for k, v in constraints.items()}
+    self.__deployment = deployment and Deployment(**deployment)
 
   @property
   @swagger.property
@@ -723,6 +724,10 @@ class Container:
   def constraints(self):
     return dict(self.__constraints)
 
+  @property
+  def deployment(self):
+    return self.__deployment
+
   @image.setter
   def image(self, image):
     assert isinstance(image, str)
@@ -757,6 +762,10 @@ class Container:
   def last_update(self, last_update):
     self.__last_update = parse_datetime(last_update)
 
+  @deployment.setter
+  def deployment(self, deployment):
+    self.__deployment = deployment
+
   def add_env(self, **env):
     self.__env.update(env)
 
@@ -790,7 +799,8 @@ class Container:
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
                 data=self.data and self.data.to_save(), rack=self.rack, host=self.host,
                 last_update=self.last_update and self.last_update.isoformat(),
-                constraints=self.constraints)
+                constraints=self.constraints,
+                deployment=self.deployment and self.deployment.to_save())
 
   def __hash__(self):
     return hash((self.id, self.appliance))
@@ -799,6 +809,26 @@ class Container:
     return self.__class__ == other.__class__ \
             and self.id == other.id \
             and self.appliance == other.appliance
+
+
+################################
+### Internal data structures ###
+################################
+
+class Deployment:
+
+  def __init__(self, ip_addresses=[]):
+    self.__ip_addresses = list(ip_addresses)
+
+  @property
+  def ip_addresses(self):
+    return list(self.__ip_addresses)
+
+  def add_ip_address(self, ip_addr):
+    self.__ip_addresses.append(ip_addr)
+
+  def to_save(self):
+    return dict(ip_addresses=self.ip_addresses)
 
 
 short_id_pattern = r'@(%s)'%Container.ID_PATTERN
@@ -812,3 +842,4 @@ def parse_container_short_id(p, appliance):
   return re.sub(r'([^@]*)%s([^@]*)'%short_id_pattern,
                 r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
                 str(p))
+
