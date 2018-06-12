@@ -1,23 +1,9 @@
-import sys
-import importlib
-
 from config import config
 from commons import MongoClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
-from scheduler.appliance.manager import ApplianceDAGDBManager
-
-
-def get_scheduler():
-  try:
-    sched_mod = '.'.join(config.pivot.scheduler.split('.')[:-1])
-    sched_class = config.pivot.scheduler.split('.')[-1]
-    return getattr(importlib.import_module(sched_mod), sched_class)
-  except Exception as e:
-    sys.stderr.write(str(e) + '\n')
-    from scheduler import DefaultApplianceScheduler
-    return DefaultApplianceScheduler
+from schedule import ApplianceScheduleNegotiator
 
 
 class ApplianceManager(Manager):
@@ -26,8 +12,6 @@ class ApplianceManager(Manager):
     self.__app_api = ApplianceAPIManager()
     self.__contr_mgr = ContainerManager()
     self.__app_db = ApplianceDBManager()
-    self.__sched_class = get_scheduler()
-    self.logger.info('Scheduler: %s'%self.__sched_class.__name__)
 
   async def get_appliance(self, app_id):
     status, app, err = await self.__app_db.get_appliance(app_id)
@@ -59,18 +43,15 @@ class ApplianceManager(Manager):
       if err:
         self.logger.error(err)
         return status, None, err
+    err = self._validate_appliance(app)
+    if err:
+      return err
     status, msg, err = await self.save_appliance(app, True)
     if err:
       self.logger.error(err)
       return status, None, err
     self.logger.info(msg)
-    self.logger.info("Start monitoring appliance '%s'"%app)
-    scheduler = self.__sched_class(app)
-    status, msg, err = await scheduler.initialize()
-    if status != 200:
-      self.logger.error(err)
-      return status, msg, err
-    scheduler.start()
+    ApplianceScheduleNegotiator(app.id, 3000).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -94,8 +75,24 @@ class ApplianceManager(Manager):
   async def save_appliance(self, app, upsert=True):
     return await self.__app_db.save_appliance(app, upsert)
 
-  async def restore_appliance(self, app_id):
-    raise NotImplemented
+  def _validate_appliance(self, app):
+
+    def validate_dependencies(contrs):
+      contrs = {c.id: c for c in contrs}
+      parents = {}
+      for c in contrs.values():
+        nonexist = list(filter(lambda c: c not in contrs, c.dependencies))
+        if nonexist:
+          return 422, None, "Dependencies '%s' do not exist in this appliance"%nonexist
+      parents.setdefault(c.id, set()).update(c.dependencies)
+      for c, p in parents.items():
+        cycles = ['%s<->%s'%(c, pp)
+                  for pp in filter(lambda x: c in parents.get(x, set()), p)]
+        if cycles:
+          return 422, None, "Cycle(s) found: %s"%cycles
+
+    return validate_dependencies(app.containers)
+
 
 
 class ApplianceAPIManager(APIManager):
@@ -147,7 +144,6 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     self.__app_id = app_id
     self.__app_api = ApplianceAPIManager()
     self.__app_db = ApplianceDBManager()
-    self.__dag_db = ApplianceDAGDBManager()
 
   async def callback(self):
     status, _, err = await self.__app_api.get_appliance(self.__app_id)
@@ -158,7 +154,6 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     if status == 404:
       self.logger.info("Delete appliance '%s' from database"%self.__app_id)
       await self.__app_db.delete_appliance(self.__app_id)
-      await self.__dag_db.delete_appliance_dag(self.__app_id)
     elif status != 200:
       self.logger.error(err)
     self.stop()

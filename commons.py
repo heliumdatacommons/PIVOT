@@ -6,7 +6,7 @@ import tornado
 from abc import ABCMeta, abstractmethod
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
-from motor.motor_tornado import MotorClient, MotorDatabase
+from motor.motor_tornado import MotorClient
 
 from util import error, dirname
 from config import config
