@@ -9,6 +9,7 @@ from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
 from cluster.manager import ClusterManager
+from index.handler import IndexHandler
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
 from config import config
@@ -17,6 +18,7 @@ from util import dirname
 
 def start_server():
   app = Application([
+    (r'\/*', IndexHandler),
     (r'/ping', PingHandler),
     (r'/cluster', ClusterInfoHandler),
     (r'/appliance', AppliancesHandler),
