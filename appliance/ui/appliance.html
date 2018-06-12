@@ -107,7 +107,7 @@
           row.append($('<td>', {text: container.type}));
           row.append($('<td>', {text: container.state, 
                                 style: 'color: ' + getStateColor(container.state) + ';'}));
-          row.append($('<td>', {text: container.rack == null?'':container.rack}))
+          row.append($('<td>', {text: container.deployment == null ? '' : container.deployment.cloud}))
           var endpoints = [];
           for (j in container.endpoints) {
             var endpoint = container.endpoints[j];

@@ -81,7 +81,14 @@ class DefaultApplianceScheduler(AbstractApplianceScheduler):
       self.logger.error(err)
     contrs = self.dag.get_free_containers()
     self.logger.info('Free containers: %s'%[c.id for c in contrs])
-    new_plans = [SchedulePlan(c.id, [c]) for c in contrs if c.id not in plans]
+    new_plans = []
+    for c in contrs:
+      if c.id in plans: continue
+      if c.cloud:
+        c.schedule.add_constraint('cloud', c.cloud)
+      if c.host:
+        c.schedule.add_constraint('public_ip', c.host)
+      new_plans += [SchedulePlan(c.id, [c])]
     if new_plans:
       self.logger.info('New plans: %s'%[p.id for p in new_plans])
     return new_plans

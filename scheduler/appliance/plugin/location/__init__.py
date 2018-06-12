@@ -66,9 +66,9 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
             self.logger.info('\t%s, %s, data size: %d'%(region, cloud, data_size))
           agent = max(agents, key=lambda a: regions.get(a.attributes.get('region'), 0))
           cloud, region = agent.attributes.get('cloud'), agent.attributes.get('region')
-          self.logger.info("Container '%s' will land on %s (%s, %s)"%(c.id, agent.hostname,
-                                                                      region, cloud))
-          c.host = agent.hostname
+          self.logger.info("Container '%s' will land on "
+                           "%s (%s, %s)"%(c.id, agent.hostname, region, cloud))
+          c.schedule.add_constraint('hostname', agent.hostname)
         else:
           self.logger.info("No matched agents have sufficient resources for '%s'"%c)
       await self.__contr_db.save_container(c, False)

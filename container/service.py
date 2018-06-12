@@ -282,11 +282,7 @@ class Service(Container):
                             containerPort=p.container_port)
                        for i, p in enumerate(self.ports)]
       r['container']['docker']['portMappings'] = port_mappings
-    if self.rack:
-      r.setdefault('constraints', []).append(['cloud', 'CLUSTER', self.rack])
-    if self.host:
-      r.setdefault('constraints', []).append(['hostname', 'CLUSTER', self.host])
-    for k, v in self.constraints.items():
+    for k, v in self.schedule.constraints.items():
       r.setdefault('constraints', []).append([str(k), 'CLUSTER', str(v)])
     return r
 

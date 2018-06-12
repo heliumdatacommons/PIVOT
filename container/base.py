@@ -431,8 +431,8 @@ class Container:
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
-               dependencies=[], data=None, rack=None, host=None, last_update=None,
-               constraints={}, deployment=None, *aargs, **kwargs):
+               dependencies=[], data=None, cloud=None, host=None, last_update=None,
+               schedule=None, deployment=None, *aargs, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -449,14 +449,14 @@ class Container:
     self.__endpoints = [Endpoint(**e) for e in endpoints]
     self.__ports = [Port(**p) for p in ports]
     self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
-    self.__rack = rack
+    self.__cloud = cloud
     self.__host = host
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = list(dependencies)
     self.__data = data and Data(**data)
     self.__last_update = parse_datetime(last_update)
-    self.__constraints = {k: v and str(v) for k, v in constraints.items()}
+    self.__schedule = Schedule(**(schedule if schedule else {}))
     self.__deployment = deployment and Deployment(**deployment)
 
   @property
@@ -636,30 +636,31 @@ class Container:
 
   @property
   @swagger.property
-  def rack(self):
+  def cloud(self):
     """
-    Placement constraint: the specific rack the container must be placed on
+    Placement constraint: Cloud platform where the container must be placed
     ---
     type: str
     nullable: true
     example: 'aws'
 
     """
-    return self.__rack
+    return self.__cloud
 
   @property
   @swagger.property
   def host(self):
     """
-    Placement constraint: the specific host (identified by the host's private IP address)
-    the container must be placed on
+    Placement constraint: physical host identified by the public IP address where the
+    container must be placed on
     ---
     type: str
     nullable: true
-    example: 10.52.0.3
+    example: '35.23.5.16'
 
     """
     return self.__host
+
 
   @property
   @swagger.property
@@ -721,11 +722,19 @@ class Container:
     return self.__last_update
 
   @property
-  def constraints(self):
-    return dict(self.__constraints)
+  def schedule(self):
+    return self.__schedule
 
   @property
+  @swagger.property
   def deployment(self):
+    """
+    Container deployment info
+    ---
+    type: Deployment
+    read_only: true
+
+    """
     return self.__deployment
 
   @image.setter
@@ -750,14 +759,6 @@ class Container:
   def state(self, state):
     self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
 
-  @rack.setter
-  def rack(self, rack):
-    self.__rack = rack
-
-  @host.setter
-  def host(self, host):
-    self.__host = host
-
   @last_update.setter
   def last_update(self, last_update):
     self.__last_update = parse_datetime(last_update)
@@ -772,9 +773,6 @@ class Container:
   def add_dependency(self, dep):
     self.__dependencies.append(dep)
 
-  def add_constraint(self, key, val):
-    self.__constraints += (key, val),
-
   def to_render(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
@@ -785,7 +783,9 @@ class Container:
                 ports=[p.to_render() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                data=self.data and self.data.to_render(), rack=self.rack, host=self.host)
+                data=self.data and self.data.to_render(),
+                cloud=self.cloud, host=self.host,
+                deployment=self.deployment and self.deployment.to_render())
 
   def to_save(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
@@ -797,9 +797,10 @@ class Container:
                 ports=[p.to_save() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                data=self.data and self.data.to_save(), rack=self.rack, host=self.host,
+                data=self.data and self.data.to_save(),
+                cloud=self.cloud, host=self.host,
                 last_update=self.last_update and self.last_update.isoformat(),
-                constraints=self.constraints,
+                schedule=self.schedule and self.schedule.to_save(),
                 deployment=self.deployment and self.deployment.to_save())
 
   def __hash__(self):
@@ -815,20 +816,74 @@ class Container:
 ### Internal data structures ###
 ################################
 
+class Schedule:
+
+  def __init__(self, constraints={}):
+    self.__constraints = dict(constraints)
+
+  @property
+  def constraints(self):
+    return dict(self.__constraints)
+
+  def add_constraint(self, key, value):
+    self.__constraints[key] = value
+
+  def to_save(self):
+    return dict(constraints=self.constraints)
+
+
+@swagger.model
 class Deployment:
 
-  def __init__(self, ip_addresses=[]):
+  def __init__(self, ip_addresses=[], cloud=None, host=None):
     self.__ip_addresses = list(ip_addresses)
+    self.__cloud = cloud
+    self.__host = host
+
+  @property
+  @swagger.property
+  def cloud(self):
+    """
+    Cloud platform where the container is deployed
+    ---
+    type: str
+    read_only: true
+
+    """
+    return self.__cloud
+
+  @property
+  @swagger.property
+  def host(self):
+    """
+    Physical host where the container is deployed
+    ---
+    type: str
+    read_only: true
+
+    """
+    return self.__host
 
   @property
   def ip_addresses(self):
     return list(self.__ip_addresses)
 
+  @cloud.setter
+  def cloud(self, cloud):
+    self.__cloud = cloud
+
+  @host.setter
+  def host(self, host):
+    self.__host = host
+
   def add_ip_address(self, ip_addr):
     self.__ip_addresses.append(ip_addr)
 
+  def to_render(self):
+    return dict(cloud=self.cloud, host=self.host)
+
   def to_save(self):
-    return dict(ip_addresses=self.ip_addresses)
+    return dict(ip_addresses=self.ip_addresses, cloud=self.cloud, host=self.host)
 
 
 short_id_pattern = r'@(%s)'%Container.ID_PATTERN

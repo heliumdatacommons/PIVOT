@@ -3,11 +3,11 @@ import datetime
 
 from datetime import timedelta
 
+from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
-from container.base import Container, ContainerType, ContainerState, Endpoint, Deployment
 from cluster.manager import AgentDBManager
-from config import config
+from container.base import Container, ContainerType, ContainerState, Endpoint, Deployment
 
 
 class ContainerManager(Manager):
@@ -129,7 +129,6 @@ class ContainerManager(Manager):
       if not err:
         parsed_srv = await self._parse_service_state(raw_service)
         contr.state, contr.endpoints = parsed_srv['state'], parsed_srv['endpoints']
-        contr.rack, contr.host = parsed_srv['rack'], parsed_srv['host']
         contr.deployment = parsed_srv['deployment']
     elif contr.type == ContainerType.JOB:
       status, raw_job, err = await self.__job_api.get_job_update(contr)
@@ -158,13 +157,13 @@ class ContainerManager(Manager):
         else:
           state = ContainerState.FAILED
     # parse endpoints
-    endpoints, deployment, rack, host = [], Deployment(), None, None
+    endpoints, deployment, cloud, host = [], Deployment(), None, None
     if state == ContainerState.RUNNING:
       for t in tasks:
         # parse endpoints
         hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
-        host, rack = hosts[0], hosts[0].attributes.get('cloud')
+        host, cloud = hosts[0], hosts[0].attributes.get('cloud')
         public_ip = host.attributes.get('public_ip')
         if not public_ip: continue
         if 'portDefinitions' in body:
@@ -174,15 +173,14 @@ class ContainerManager(Manager):
           for i, p in enumerate(body['container']['portMappings']):
             endpoints += [Endpoint(public_ip, p['containerPort'], t['ports'][i],
                                    p['protocol'])]
-
         # parse virtual IP addresses
         for ip in t['ipAddresses']:
           if ip['protocol'] != 'IPv4':
             continue
           deployment.add_ip_address(ip['ipAddress'])
+        deployment.host, deployment.cloud = host.hostname, cloud
     _, appliance, id = body['id'].split('/')
     return dict(id=id, appliance=appliance, state=state,
-                rack=rack, host=host and host.hostname,
                 endpoints=endpoints, deployment=deployment)
 
   async def _parse_job_state(self, body):
