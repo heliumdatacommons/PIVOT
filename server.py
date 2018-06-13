@@ -23,7 +23,7 @@ def start_cluster_monitor():
 
 def start_global_scheduler():
   scheduler = GlobalScheduleExecutor(get_global_scheduler())
-  tornado.ioloop.IOLoop.instance().add_callback(scheduler.start)
+  tornado.ioloop.IOLoop.instance().add_callback(scheduler.start_rescheduler)
 
 
 def start_server():

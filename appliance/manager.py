@@ -54,7 +54,8 @@ class ApplianceManager(Manager):
       self.logger.error(err)
       return status, None, err
     self.logger.info(msg)
-    ApplianceScheduleExecutor(app.id, 3000).start()
+    scheduler = self._get_scheduler(app.scheduler)
+    ApplianceScheduleExecutor(app.id, scheduler, 3000).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -72,8 +73,7 @@ class ApplianceManager(Manager):
     if err and status != 404:
       self.logger.error(err)
       return 400, None, "Failed to deprovision appliance '%s'"%app_id
-    scheduler = self._get_scheduler(app.scheduler)
-    ApplianceDeletionChecker(app_id, scheduler).start()
+    ApplianceDeletionChecker(app_id).start()
     return status, msg, None
 
   async def save_appliance(self, app, upsert=True):
@@ -101,10 +101,10 @@ class ApplianceManager(Manager):
     try:
       sched_mod = '.'.join(scheduler_name.split('.')[:-1])
       sched_class = scheduler_name.split('.')[-1]
-      return getattr(importlib.import_module(sched_mod), sched_class)
+      return getattr(importlib.import_module(sched_mod), sched_class)()
     except Exception as e:
       self.logger.error(str(e))
-      return schedule.DefaultApplianceScheduler
+      return schedule.local.DefaultApplianceScheduler()
 
 
 class ApplianceAPIManager(APIManager):

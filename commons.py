@@ -3,7 +3,7 @@ import json
 import logging
 import tornado
 
-from abc import abstractmethod
+from abc import ABCMeta, abstractmethod
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
 from motor.motor_tornado import MotorClient
@@ -95,7 +95,7 @@ class APIManager(Manager):
     self.http_cli = AsyncHttpClientWrapper()
 
 
-class AutonomousMonitor(Loggable):
+class AutonomousMonitor(Loggable, metaclass=ABCMeta):
 
   def __init__(self, interval):
     self.__interval = interval

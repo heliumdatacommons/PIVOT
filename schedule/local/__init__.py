@@ -2,7 +2,7 @@ import appliance
 
 from abc import ABCMeta
 
-from schedule import GlobalScheduleExecutor, GlobalScheduler, SchedulePlan
+from schedule import GlobalScheduleExecutor, SchedulePlan
 from commons import AutonomousMonitor, Loggable
 from config import get_global_scheduler
 
@@ -14,7 +14,7 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
     self.__app_id = app_id
     self.__app_mgr = appliance.manager.ApplianceManager()
     self.__local_sched = scheduler
-    self.__global_sched = GlobalScheduleExecutor(get_global_scheduler())
+    self.__global_sched_exec = GlobalScheduleExecutor(get_global_scheduler())
 
   async def callback(self):
     # get appliance
@@ -27,7 +27,7 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
       self.stop()
       return
     # get cluster info
-    agents = await self.__global_sched.get_agents()
+    agents = await self.__global_sched_exec.get_agents()
     # contact the scheduler for new schedule
     sched = await self.__local_sched.schedule(app, agents)
     self.logger.debug('Containers to be scheduled: %s'%[c.id for c in sched.containers])
@@ -41,7 +41,7 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
 
   async def _execute(self, sched):
     for c in sched.containers:
-      await self.__global_sched.schedule(c)
+      await self.__global_sched_exec.submit(c)
       self.logger.info('Container %s is being scheduled'%c.id)
 
 
