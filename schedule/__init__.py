@@ -1,5 +1,7 @@
 import sys
 import importlib
+
+import cluster
 import appliance
 
 from abc import ABCMeta
@@ -27,10 +29,11 @@ class ApplianceScheduleNegotiator(AutonomousMonitor):
     self.__app_id = app_id
     self.__executor = ApplianceScheduleExecutor()
     self.__scheduler = get_scheduler()()
+    self.__cluster_mgr = cluster.manager.ClusterManager()
     self.__app_mgr = appliance.manager.ApplianceManager()
 
   async def callback(self):
-    # read appliance from DB
+    # get appliance
     status, app, err = await self.__app_mgr.get_appliance(self.__app_id)
     if not app:
       if status == 404:
@@ -39,9 +42,11 @@ class ApplianceScheduleNegotiator(AutonomousMonitor):
         self.logger.error(err)
       self.stop()
       return
+    # get cluster info
+    agents = await self.__cluster_mgr.get_cluster(ttl=0)
     # contact the scheduler for new schedule
-    sched = self.__scheduler.schedule(app)
-    self.logger.info('Containers to be scheduled: %s'%[c.id for c in sched.containers])
+    sched = await self.__scheduler.schedule(app, agents)
+    self.logger.debug('Containers to be scheduled: %s'%[c.id for c in sched.containers])
     # if the scheduling is done
     if sched.done:
       self.logger.info('Scheduling is done for appliance %s'%self.__app_id)
@@ -88,6 +93,6 @@ class Schedule:
 
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
 
-  def schedule(self, app):
+  async def schedule(self, app, agents):
     raise NotImplemented
 

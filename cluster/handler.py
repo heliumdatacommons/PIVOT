@@ -42,8 +42,8 @@ class ClusterInfoHandler(RequestHandler, Loggable):
     if self.request.query_arguments:
       args = {k: [v.decode('utf-8') for v in vals]
               for k, vals in self.request.query_arguments.items()}
-      hosts = await self.__cluster_mgr.find_agents(**args)
-      self.write(json.dumps([h.to_render() for h in hosts]))
+      agents = await self.__cluster_mgr.find_agents(**args)
+      self.write(json.dumps([h.to_render() for h in agents]))
     else:
-      hosts = await self.__cluster_mgr.get_cluster()
-      self.write(json.dumps([h.to_render() for h in hosts]))
+      agents = await self.__cluster_mgr.get_cluster()
+      self.write(json.dumps([h.to_render() for h in agents]))

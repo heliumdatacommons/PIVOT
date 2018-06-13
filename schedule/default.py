@@ -4,10 +4,10 @@ from schedule import ApplianceScheduler, Schedule
 
 class DefaultApplianceScheduler(ApplianceScheduler):
 
-  def schedule(self, app):
+  async def schedule(self, app, agents):
     sched = Schedule()
-    free_contrs = self._resolve_dependencies(app)
-    self.logger.info('Free containers: %s'%[c.id for c in free_contrs])
+    free_contrs = self.resolve_dependencies(app)
+    self.logger.debug('Free containers: %s'%[c.id for c in free_contrs])
     if not free_contrs:
       sched.done = True
       return sched
@@ -15,7 +15,7 @@ class DefaultApplianceScheduler(ApplianceScheduler):
                           (ContainerState.SUBMITTED, ContainerState.FAILED)])
     return sched
 
-  def _resolve_dependencies(self, app):
+  def resolve_dependencies(self, app):
     contrs = {c.id: c for c in app.containers
               if (c.type == ContainerType.JOB and c.state != ContainerState.SUCCESS)
               or (c.type == ContainerType.SERVICE and c.state != ContainerState.RUNNING)}
