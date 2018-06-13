@@ -2,7 +2,6 @@ pivot:
   master: m1.dcos
   port: 9090
   n_parallel: 8
-  scheduler: schedule.plugin.location_aware.LocationAwareApplianceScheduler
   ha: false
 db:
   host: localhost

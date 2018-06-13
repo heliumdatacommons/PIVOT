@@ -12,19 +12,18 @@ from container.base import Container, ContainerType, ContainerState, Endpoint, D
 
 class ContainerManager(Manager):
 
-  def __init__(self, contr_info_ttl=timedelta(seconds=3)):
+  def __init__(self):
     self.__service_api = ServiceAPIManager()
     self.__job_api = JobAPIManager()
     self.__contr_db = ContainerDBManager()
     self.__cluster_db = AgentDBManager()
-    self.__contr_info_ttl = contr_info_ttl
 
-  async def get_container(self, app_id, contr_id):
+  async def get_container(self, app_id, contr_id, ttl=0):
     status, contr, err = await self.__contr_db.get_container(app_id, contr_id)
     if status == 404:
       return status, contr, err
     if not contr.last_update or \
-        datetime.datetime.now(tz=None) - contr.last_update > self.__contr_info_ttl:
+        datetime.datetime.now(tz=None) - contr.last_update > timedelta(seconds=ttl):
       status, contr, err = await self._get_updated_container(contr)
       if status == 404 and contr.state != ContainerState.SUBMITTED:
         self.logger.info("Deleted ghost container: %s"%contr)
@@ -32,18 +31,18 @@ class ContainerManager(Manager):
         return 404, None, err
       if status == 200:
         contr.last_update = datetime.datetime.now(tz=None)
-        await self.__contr_db.save_container(contr, False)
+        await self.save_container(contr)
       elif status != 404:
         self.logger.error("Failed to update container '%s'"%contr)
         self.logger.error(err)
     return 200, contr, None
 
-  async def get_containers(self, app_id, **kwargs):
-    contrs = await self.__contr_db.get_containers(appliance=app_id, **kwargs)
+  async def get_containers(self, ttl=0, **kwargs):
+    contrs = await self.__contr_db.get_containers(**kwargs)
     contrs_to_del, contrs_to_update = [], [],
     cur_time = datetime.datetime.now(tz=None)
     for c in contrs:
-      if c.last_update and cur_time - c.last_update <= self.__contr_info_ttl:
+      if c.last_update and cur_time - c.last_update <= timedelta(seconds=ttl):
         continue
       status, c, err = await self._get_updated_container(c)
       if status == 404 and c.state != ContainerState.SUBMITTED:
@@ -51,7 +50,7 @@ class ContainerManager(Manager):
       if status == 200:
         contrs_to_update.append(c)
     if contrs_to_del:
-      filters = dict(id={'$in': [c.id for c in contrs_to_del]}, appliance=app_id)
+      filters = dict(id={'$in': [c.id for c in contrs_to_del]})
       status, msg, err = await self.__contr_db.delete_containers(**filters)
       if err:
         self.logger.error(err)
@@ -59,7 +58,7 @@ class ContainerManager(Manager):
         self.logger.info(msg)
     for c in contrs_to_update:
       c.last_update = datetime.datetime.now(tz=None)
-      await self.__contr_db.save_container(c, upsert=False)
+      await self.save_container(c)
     return 200, contrs, None
 
   async def create_container(self, data):
@@ -69,7 +68,7 @@ class ContainerManager(Manager):
     status, contr, err = Container.parse(data)
     if err:
       return status, None, err
-    await self.__contr_db.save_container(contr, True)
+    await self.save_container(contr, True)
     return 201, contr, None
 
   async def delete_container(self, app_id, contr_id):
@@ -120,6 +119,9 @@ class ContainerManager(Manager):
       self.logger.debug('Failed to provision %s'%contr)
       return status, None, err
     return status, contr, None
+
+  async def save_container(self, contr, upsert=False):
+    await self.__contr_db.save_container(contr, upsert=upsert)
 
   async def _get_updated_container(self, contr):
     assert isinstance(contr, Container)

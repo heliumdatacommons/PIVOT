@@ -2,7 +2,7 @@ from tornado.escape import url_escape
 
 from config import config
 from commons import APIManager
-from schedule.default import DefaultApplianceScheduler
+from schedule.local import DefaultApplianceScheduler
 
 
 class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
@@ -13,6 +13,8 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
 
   async def schedule(self, app, agents):
     sched = await super(LocationAwareApplianceScheduler, self).schedule(app, agents)
+    if sched.done:
+      return sched
     if not config.irods.host or not config.irods.port:
       self.logger.info('iRODS API is not properly set. Fallback to default scheduler')
       return sched

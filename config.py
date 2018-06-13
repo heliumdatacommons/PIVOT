@@ -1,5 +1,6 @@
 import sys
 import yaml
+import importlib
 
 from util import dirname
 
@@ -70,8 +71,7 @@ class iRODSAPI(API):
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
-               scheduler='scheduler.appliance.DefaultApplianceScheduler',
-               ha=False, *args, **kwargs):
+               scheduler='schedule.DefaultGlobalScheduler', ha=False, *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel
@@ -188,3 +188,14 @@ class Configuration:
 
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))
+
+
+def get_global_scheduler():
+  try:
+    sched_mod = '.'.join(config.pivot.scheduler.split('.')[:-1])
+    sched_class = config.pivot.scheduler.split('.')[-1]
+    return getattr(importlib.import_module(sched_mod), sched_class)()
+  except Exception as e:
+    sys.stderr.write(str(e) + '\n')
+    from schedule import DefaultGlobalScheduler
+    return DefaultGlobalScheduler()

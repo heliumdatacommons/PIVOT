@@ -43,9 +43,11 @@ class Appliance:
     app = Appliance(data['id'], containers)
     return 200, app, None
 
-  def __init__(self, id, containers=[], **kwargs):
+  def __init__(self, id, containers=[],
+               scheduler='schedule.local.DefaultApplianceScheduler', **kwargs):
     self.__id = id
     self.__containers = list(containers)
+    self.__scheduler = scheduler
 
   @property
   @swagger.property
@@ -74,6 +76,18 @@ class Appliance:
 
     """
     return self.__containers
+
+  @property
+  @swagger.property
+  def scheduler(self):
+    """
+    Appliance-level scheduler for the appliance
+
+    ---
+    type: str
+
+    """
+    return self.__scheduler
 
   @containers.setter
   def containers(self, contrs):

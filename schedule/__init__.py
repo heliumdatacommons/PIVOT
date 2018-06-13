@@ -1,75 +1,10 @@
-import sys
-import importlib
-
+import container
 import cluster
-import appliance
-
-from abc import ABCMeta
 
 from commons import AutonomousMonitor, Singleton, Loggable
-from container.manager import ContainerManager
-from config import config
 
 
-def get_scheduler():
-  try:
-    sched_mod = '.'.join(config.pivot.scheduler.split('.')[:-1])
-    sched_class = config.pivot.scheduler.split('.')[-1]
-    return getattr(importlib.import_module(sched_mod), sched_class)
-  except Exception as e:
-    sys.stderr.write(str(e) + '\n')
-    from schedule.default import DefaultApplianceScheduler
-    return DefaultApplianceScheduler
-
-
-class ApplianceScheduleNegotiator(AutonomousMonitor):
-
-  def __init__(self, app_id, interval=3000):
-    super(ApplianceScheduleNegotiator, self).__init__(interval)
-    self.__app_id = app_id
-    self.__executor = ApplianceScheduleExecutor()
-    self.__scheduler = get_scheduler()()
-    self.__cluster_mgr = cluster.manager.ClusterManager()
-    self.__app_mgr = appliance.manager.ApplianceManager()
-
-  async def callback(self):
-    # get appliance
-    status, app, err = await self.__app_mgr.get_appliance(self.__app_id)
-    if not app:
-      if status == 404:
-        self.logger.info('Appliance %s no longer exists'%self.__app_id)
-      else:
-        self.logger.error(err)
-      self.stop()
-      return
-    # get cluster info
-    agents = await self.__cluster_mgr.get_cluster(ttl=0)
-    # contact the scheduler for new schedule
-    sched = await self.__scheduler.schedule(app, agents)
-    self.logger.debug('Containers to be scheduled: %s'%[c.id for c in sched.containers])
-    # if the scheduling is done
-    if sched.done:
-      self.logger.info('Scheduling is done for appliance %s'%self.__app_id)
-      self.stop()
-      return
-    # execute the new schedule
-    await self.__executor.execute(sched)
-
-
-class ApplianceScheduleExecutor(Loggable, metaclass=Singleton):
-
-  def __init__(self):
-    self.__contr_mgr = ContainerManager()
-
-  async def execute(self, sched):
-    for c in sched.containers:
-      _, msg, err = await self.__contr_mgr.provision_container(c)
-      if err:
-        self.logger.error(err)
-      self.logger.info('Container %s is being provisioned'%c.id)
-
-
-class Schedule:
+class SchedulePlan:
 
   def __init__(self, done=False, containers=[]):
     self.__done = done
@@ -91,8 +26,63 @@ class Schedule:
     self.__containers += list(contrs)
 
 
-class ApplianceScheduler(Loggable, metaclass=ABCMeta):
+class GlobalScheduler(Loggable, metaclass=Singleton):
 
-  async def schedule(self, app, agents):
-    raise NotImplemented
+  async def schedule(self, contr, agents):
+    # generate a schedule plan
+    # return the schedule plan
+    pass
 
+
+  async def reschedule(self, contrs, agents):
+    # collect evidence for scheduling
+    # generate a reschedule plan
+    # return the reschedule plan
+    pass
+
+
+class GlobalScheduleExecutor(AutonomousMonitor, metaclass=Singleton):
+
+  def __init__(self, scheduler, interval=5000):
+    super(GlobalScheduleExecutor, self).__init__(interval)
+    self.__contr_mgr = container.manager.ContainerManager()
+    self.__cluster_mgr = cluster.manager.ClusterManager()
+    self.__scheduler = scheduler
+
+  async def schedule(self, contr):
+    agents = await self.get_agents()
+    plan = await self.__scheduler.schedule(contr, agents)
+    for c in plan.containers:
+      await self._provision_container(c)
+
+  async def callback(self):
+    agents = await self.get_agents()
+    contrs = await self._get_containers()
+    if not contrs: return
+    plan = await self.__scheduler.reschedule(contrs, agents)
+    for c in plan.containers:
+      await self._provision_container(c)
+
+  async def get_agents(self):
+    return await self.__cluster_mgr.get_cluster(0)
+
+  async def _get_containers(self, **kwargs):
+    status, contrs, err = await self.__contr_mgr.get_containers(**kwargs)
+    if err:
+      self.logger.error(err)
+    return contrs
+
+  async def _provision_container(self, contr):
+    await self.__contr_mgr.save_container(contr)
+    status, contr, err = await self.__contr_mgr.provision_container(contr)
+    if err:
+      self.logger.error(err)
+
+
+class DefaultGlobalScheduler(GlobalScheduler):
+
+  async def schedule(self, contr, agents):
+    pass
+
+  async def reschedule(self, contrs, agents):
+    pass 

@@ -1,9 +1,12 @@
+import importlib
+import schedule
+
 from config import config
 from commons import MongoClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance.base import Appliance
 from container.manager import ContainerManager
-from schedule import ApplianceScheduleNegotiator
+from schedule.local import ApplianceScheduleExecutor
 
 
 class ApplianceManager(Manager):
@@ -18,7 +21,7 @@ class ApplianceManager(Manager):
     if status != 200:
       return status, app, err
     app = Appliance(**app)
-    status, app.containers, err = await self.__contr_mgr.get_containers(app_id)
+    status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
     if not app.containers:
       self.logger.info("Empty appliance '%s', deleting"%app_id)
       status, msg, err = await self.delete_appliance(app_id)
@@ -51,7 +54,7 @@ class ApplianceManager(Manager):
       self.logger.error(err)
       return status, None, err
     self.logger.info(msg)
-    ApplianceScheduleNegotiator(app.id, 3000).start()
+    ApplianceScheduleExecutor(app.id, 3000).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
@@ -69,7 +72,8 @@ class ApplianceManager(Manager):
     if err and status != 404:
       self.logger.error(err)
       return 400, None, "Failed to deprovision appliance '%s'"%app_id
-    ApplianceDeletionChecker(app_id).start()
+    scheduler = self._get_scheduler(app.scheduler)
+    ApplianceDeletionChecker(app_id, scheduler).start()
     return status, msg, None
 
   async def save_appliance(self, app, upsert=True):
@@ -93,6 +97,14 @@ class ApplianceManager(Manager):
 
     return validate_dependencies(app.containers)
 
+  def _get_scheduler(self, scheduler_name):
+    try:
+      sched_mod = '.'.join(scheduler_name.split('.')[:-1])
+      sched_class = scheduler_name.split('.')[-1]
+      return getattr(importlib.import_module(sched_mod), sched_class)
+    except Exception as e:
+      self.logger.error(str(e))
+      return schedule.DefaultApplianceScheduler
 
 
 class ApplianceAPIManager(APIManager):
