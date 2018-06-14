@@ -35,7 +35,7 @@ class GlobalScheduler(Loggable, metaclass=Singleton):
     raise NotImplemented
 
 
-class GlobalScheduleExecutor(metaclass=Singleton):
+class GlobalScheduleExecutor(Loggable, metaclass=Singleton):
 
   def __init__(self, scheduler, interval=30000):
     super(GlobalScheduleExecutor, self).__init__()
@@ -73,6 +73,7 @@ class RescheduleRunner(AutonomousMonitor):
 
   def __init__(self, scheduler, executor, interval=30000):
     super(RescheduleRunner, self).__init__(interval)
+    self.logger.info('Global scheduler: %s'%scheduler.__class__.__name__)
     self.__scheduler = scheduler
     self.__executor = executor
 

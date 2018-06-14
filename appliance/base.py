@@ -40,7 +40,8 @@ class Appliance:
     undefined = list(addresses - contr_ids)
     if undefined:
       return 400, None, "Undefined container(s): %s"%undefined
-    app = Appliance(data['id'], containers)
+    app = Appliance(containers=containers,
+                    **{k: v for k, v in data.items() if k not in ('containers', )})
     return 200, app, None
 
   def __init__(self, id, containers=[],
@@ -94,11 +95,11 @@ class Appliance:
     self.__containers = list(contrs)
 
   def to_render(self):
-    return dict(id=self.id,
+    return dict(id=self.id, scheduler=self.scheduler,
                 containers=[c.to_render() for c in self.containers])
 
   def to_save(self):
-    return dict(id=self.id)
+    return dict(id=self.id, scheduler=self.scheduler)
 
   def __str__(self):
     return self.id

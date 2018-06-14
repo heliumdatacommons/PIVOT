@@ -140,7 +140,7 @@ class Service(Container):
   """
 
   def __init__(self, instances=1, labels={}, health_check=None, default_health_check=False,
-               minimum_capacity=1., **kwargs):
+               minimum_capacity=0, **kwargs):
     super(Service, self).__init__(**kwargs)
     self.__instances = instances
     self.__labels = dict(labels)

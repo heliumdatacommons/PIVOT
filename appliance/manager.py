@@ -53,9 +53,10 @@ class ApplianceManager(Manager):
     if err:
       self.logger.error(err)
       return status, None, err
-    self.logger.info(msg)
+    self.logger.info(app.scheduler)
     scheduler = self._get_scheduler(app.scheduler)
-    ApplianceScheduleExecutor(app.id, scheduler, 3000).start()
+    self.logger.info('Appliance %s uses %s'%(app.id, scheduler.__class__.__name__))
+    ApplianceScheduleExecutor(app.id, scheduler).start()
     return 201, app, None
 
   async def delete_appliance(self, app_id):
