@@ -19,7 +19,7 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
       self.logger.info('iRODS API is not properly set. Fallback to default scheduler')
       return sched
     for c in sched.containers:
-      if not c.data.input: continue
+      if not c.data or not c.data.input: continue
       regions = {}
       for lfn in c.data.input:
         data_obj = await self._get_data_object(lfn)
