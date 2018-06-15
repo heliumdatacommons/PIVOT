@@ -42,7 +42,7 @@ class ApplianceManager(Manager):
       self.logger.error(err)
       return status, None, err
     for c in app.containers:
-      status, msg, err = await self.__contr_mgr.create_container(c.to_render())
+      status, msg, err = await self.__contr_mgr.create_container(c.to_save())
       if err:
         self.logger.error(err)
         return status, None, err
@@ -53,7 +53,6 @@ class ApplianceManager(Manager):
     if err:
       self.logger.error(err)
       return status, None, err
-    self.logger.info(app.scheduler)
     scheduler = self._get_scheduler(app.scheduler)
     self.logger.info('Appliance %s uses %s'%(app.id, scheduler.__class__.__name__))
     ApplianceScheduleExecutor(app.id, scheduler).start()

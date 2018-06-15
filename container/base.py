@@ -818,7 +818,7 @@ class Container:
 
 class Schedule:
 
-  def __init__(self, constraints={}):
+  def __init__(self, constraints={}, *args, **kwargs):
     self.__constraints = dict(constraints)
 
   @property
