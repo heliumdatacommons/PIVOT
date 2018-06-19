@@ -29,7 +29,7 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
     # get cluster info
     agents = await self.__global_sched_exec.get_agents()
     # contact the scheduler for new schedule
-    sched = await self.__local_sched.schedule(app, agents)
+    sched = await self.__local_sched.schedule(app, list(agents))
     self.logger.debug('Containers to be scheduled: %s'%[c.id for c in sched.containers])
     # if the scheduling is done
     if sched.done:
@@ -48,6 +48,11 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
 
   async def schedule(self, app, agents):
+    """
+    Caution: the parameters should not be overridden by schedulers that extend
+    this class, otherwise inconsistency of appliance/cluster info will be caused.
+
+    """
     raise NotImplemented
 
 

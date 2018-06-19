@@ -49,7 +49,7 @@ class GlobalScheduleExecutor(Loggable, metaclass=Singleton):
 
   async def submit(self, contr):
     agents = await self.get_agents()
-    plan = await self.__scheduler.schedule(contr, agents)
+    plan = await self.__scheduler.schedule(contr, list(agents))
     for c in plan.containers:
       await self.provision_container(c)
 
@@ -90,9 +90,7 @@ class RescheduleRunner(AutonomousMonitor):
 class DefaultGlobalScheduler(GlobalScheduler):
 
   async def schedule(self, contr, agents):
-    self.logger.info('Scheduled by %s'%self.__class__.__name__)
     return SchedulePlan(containers=[contr])
 
   async def reschedule(self, contrs, agents):
-    # self.logger.info('Rescheduled by %s'%self.__class__.__name__)
     return SchedulePlan()

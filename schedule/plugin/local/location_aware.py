@@ -12,7 +12,7 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
     self.__api = iRODSAPIManager()
 
   async def schedule(self, app, agents):
-    sched = await super(LocationAwareApplianceScheduler, self).schedule(app, agents)
+    sched = await super(LocationAwareApplianceScheduler, self).schedule(app, list(agents))
     if sched.done:
       return sched
     if not config.irods.host or not config.irods.port:
@@ -26,16 +26,12 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
         if not data_obj: continue
         for r in await self.__api.get_replica_regions(data_obj.get('replicas', [])):
           regions[r] = regions.setdefault(r, 0) + data_obj.get('size', 0)
-      agents = [a for a in agents
-                if a.attributes.get('region', None) in regions.keys()
-                and a.resources.cpus >= c.resources.cpus
-                and a.resources.mem >= c.resources.mem
-                and a.resources.disk >= c.resources.disk]
-      if not agents:
-        self.logger.info("No matched agents have sufficient resources for '%s'"%c)
+      matched = [a for a in agents if a.attributes.get('region', None) in regions.keys()]
+      if not matched:
+        self.logger.info("No matched agents found for '%s'"%c)
         return sched
       self.logger.info('Candidate regions:')
-      for a in agents:
+      for a in matched:
         region, cloud = a.attributes.get('region'), a.attributes.get('cloud')
         data_size = regions[region]
         self.logger.info('\t%s, %s, data size: %d'%(region, cloud, data_size))
