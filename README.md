@@ -5,6 +5,49 @@ Helium DataCommons PIVOT
 ![arch](figures/arch/pivot.png)
 
 ### Deployment
+The service consists of two micro-services - a web server and a MongoDB
+database.
+
+To launch the database, send the request body below to Marathon:
+
+```
+{
+  "id": "/sys/pivot",
+  "instances": 1,
+  "cpus": 1,
+  "mem": 1024,
+  "container": {
+    "type": "DOCKER",
+    "volumes": [
+      {
+        "containerPath": "/data/db",
+        "hostPath": "/data/pivot_db",
+        "mode": "RW"
+      }
+    ],
+    "docker": {
+      "image": "heliumdatacommons/mongodb",
+      "privileged": false,
+      "parameters": [],
+      "forcePullImage": true
+    }
+  },
+  "networks": [
+    {
+      "mode": "host"
+    }
+  ],
+  "portDefinitions": [],
+  "requirePorts": false
+  "upgradeStrategy": {
+    "minimumHealthCapacity": 0,
+    "maximumOverCapacity": 0
+  }
+}
+```
+
+The database listens on port `27017` by default and it is only
+accessible internally within the virtual overlay network.
 
 The request body for deploying PIVOT on Marathon is as below:
 
@@ -16,10 +59,14 @@ The request body for deploying PIVOT on Marathon is as below:
   "mem": 2048,
   "disk": 4096,
   "args": [
+    "--master",
+    "<master-private-ip-addr>"
     "--port",
     "9191",
     "--n_parallel",
-    "2"
+    "2",
+     "--db_host",
+    "pivot-db-sys.marathon.containerip.dcos.thisdcos.directory"
   ],
   "container": {
     "type": "DOCKER",
@@ -76,8 +123,20 @@ The request body for deploying PIVOT on Marathon is as below:
 
 ```
 
-With curl, the deployment command is as below (assuming the request body
-is saved to a file named `pivot.json`):
+Note that the private IP address of the leader Mesos master needs to be
+specified as a part of the arguments (`<master-private-ip-addr>`)
+in the request.
+
+Besides, as the web server needs to interact with the
+database, the internal FQDN of the database needs to be specified. The
+internal FQDN is formatted as
+`<service-name>-<group-name>.marathon.containerip.dcos.thisdcos.directory`.
+For example, if the service is named as `/foo/bar`, its FQDN is
+`foo-bar.marathon.containerip.dcos.thisdcos.directory`.
+
+
+With curl, a typical deployment command is as below
+(assuming the request body is saved to a file named `pivot.json`):
 
 ```shell
 curl -X PUT \
@@ -85,6 +144,8 @@ curl -X PUT \
     -d @pivot.json \
     http://<marathon-host>:<marathon-port>/v2/apps
 ```
+
+By default, Marathon listens on port `8080`.
 
 **Note:** The Marathon endpoint is typically protected behind a firewall
 and cannot be reached outside the virtual network of DC/OS. Therefore,
