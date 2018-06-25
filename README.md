@@ -53,7 +53,7 @@ The request body for deploying PIVOT on Marathon is as below:
 
 ```json
 {
-  "id": "/sys/pivot",
+  "id": "/sys/pivot-db",
   "instances": 1,
   "cpus": 2,
   "mem": 2048,
