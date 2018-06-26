@@ -29,6 +29,7 @@ class ContainerState(Enum):
   RUNNING = 'running'
   SUCCESS = 'success'
   FAILED = 'failed'
+  KILLED = 'killed'
 
   @classmethod
   def has_value(cls, val):

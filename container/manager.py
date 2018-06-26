@@ -136,7 +136,7 @@ class ContainerManager(Manager):
       status, raw_job, err = await self.__job_api.get_job_update(contr)
       if not err:
         parsed_job = await self._parse_job_state(raw_job)
-        contr.state = parsed_job['state']
+        contr.state, contr.deployment = parsed_job['state'], parsed_job['deployment']
     else:
       err = "Unknown container type: %s"%contr.type
       self.logger.warn(err)
@@ -159,7 +159,7 @@ class ContainerManager(Manager):
         else:
           state = ContainerState.FAILED
     # parse endpoints
-    endpoints, deployment, cloud, host = [], Deployment(), None, None
+    endpoints, deployment = [], Deployment()
     if state == ContainerState.RUNNING:
       for t in tasks:
         # parse endpoints
@@ -186,22 +186,31 @@ class ContainerManager(Manager):
                 endpoints=endpoints, deployment=deployment)
 
   async def _parse_job_state(self, body):
-    ### TO BE IMPORVED: currently the body is the output of the job summary due to
-    ### limitations of Chronos API. With that being said, endpoints are not yet supported
-    ### for jobs.
     assert isinstance(body, dict)
-    state = body['state'].lower().strip('1 ')
-    if body['status'] == 'success':
-      repeats_left = body['schedule'].split('/')[0].strip('R')
-      repeats_left = int(repeats_left) if repeats_left else 0
-      state = 'running' if repeats_left > 0 else body['status']
-    state = dict(running=ContainerState.RUNNING,
-                 success=ContainerState.SUCCESS,
-                 failure=ContainerState.FAILED,
-                 queued=ContainerState.STAGING,
-                 idle=ContainerState.PENDING).get(state, ContainerState.SUBMITTED)
-    appliance, id = body['name'].split('.')
-    return dict(id=id, appliance=appliance, state=state)
+    if 'task' not in body or not body['task']:
+      return dict(**body, state=ContainerState.PENDING)
+    task = body['task']
+    self.logger.info(json.dumps(task, indent=2))
+    state = dict(TASK_STARTING=ContainerState.RUNNING,
+                 TASK_RUNNING=ContainerState.RUNNING,
+                 TASK_FINISHED=ContainerState.SUCCESS,
+                 TASK_FAILED=ContainerState.FAILED,
+                 TASK_LOST=ContainerState.FAILED,
+                 TASK_ERROR=ContainerState.FAILED,
+                 TASK_STAGING=ContainerState.STAGING,
+                 TASK_KILLING=ContainerState.KILLED,
+                 TASK_KILLED=ContainerState.KILLED).get(task.get('state'),
+                                                        ContainerState.SUBMITTED)
+    deployment = Deployment()
+    hosts = await self.__cluster_db.find_agents(id=task.get('slave_id'))
+    if not hosts:
+      if task.get('slave_id'):
+        self.logger.warning('Unrecognized agent ID: %s'%task.get('slave_id'))
+      return dict(**body, state=ContainerState.PENDING)
+    deployment.host = hosts[0].hostname
+    deployment.cloud = hosts[0].attributes.get('cloud')
+    deployment.add_ip_address(hosts[0].hostname)
+    return dict(**body, state=state, deployment=deployment)
 
 
 class ServiceAPIManager(APIManager):
@@ -238,18 +247,22 @@ class JobAPIManager(APIManager):
     super(JobAPIManager, self).__init__()
 
   async def get_job_update(self, job):
-    api = config.chronos
-    endpoint = '%s/jobs/summary'%api.endpoint
-    status, body, err = await self.http_cli.get(api.host, api.port, endpoint)
-    if not body:
+    chronos = config.chronos
+    endpoint = '%s/job/%s'%(chronos.endpoint, job)
+    status, body, err = await self.http_cli.get(chronos.host, chronos.port, endpoint)
+    if err:
       return status, None, err
-    jobs = [j for j in body['jobs'] if j and j['name'] == str(job)]
-    if not jobs:
-      return 404, job, "Job '%s' is not found"%job
-    if status != 200:
-      self.logger.debug(err)
-      return status, job, err
-    return status, jobs[0], None
+    task_id = body['taskId']
+    job = dict(id=job.id, appliance=job.appliance)
+    if not task_id:
+      return status, job, None
+    mesos = config.mesos
+    endpoint = '%s/tasks?task_id=%s'%(mesos.endpoint, task_id)
+    status, body, err = await self.http_cli.get(mesos.host, mesos.port, endpoint)
+    if err:
+      return status, None, err
+    job['task'] = body['tasks'][0] if body['tasks'] else None
+    return status, job, None
 
   async def provision_job(self, job):
     api = config.chronos

@@ -153,12 +153,13 @@ class ClusterAPIManager(APIManager):
                - h['offered_resources'].get(type, 0)
                - h['reserved_resources'].get(type, 0))
 
-    agents = [Agent(hostname=h['hostname'],
+    agents = [Agent(id=h['id'],
+                    hostname=h['hostname'],
                     resources=AgentResources(calc_available_resource(h, 'cpus'),
-                                            calc_available_resource(h, 'mem'),
-                                            calc_available_resource(h, 'disk'),
-                                            calc_available_resource(h, 'gpus'),
-                                            calc_available_resource(h, 'ports')),
+                                             calc_available_resource(h, 'mem'),
+                                             calc_available_resource(h, 'disk'),
+                                             calc_available_resource(h, 'gpus'),
+                                             calc_available_resource(h, 'ports')),
                     attributes=h['attributes'])
              for h in body['slaves']]
     return status, agents, None
@@ -202,7 +203,8 @@ class AgentDBManager(Manager):
             async for a in self.__agent_col.find()]
 
   async def find_agents(self, **kwargs):
-    cond = {'attributes.%s'%k: {'$in': v} if isinstance(v, list) else v
+    cond = {k if k in ('id', 'hostname') else 'attributes.%s'%k:
+            {'$in': v} if isinstance(v, list) else v
             for k, v in kwargs.items()}
     return [Agent(**a, resources=AgentResources(**a.pop('resources', None)))
             async for a in self.__agent_col.find(cond)]

@@ -54,10 +54,24 @@ class Agent:
 
   """
 
-  def __init__(self, hostname, resources, attributes={}, *args, **kwargs):
+  def __init__(self, id, hostname, resources, attributes={}, *args, **kwargs):
+    self.__id = id
+    self.__hostname = hostname
     self.__resources = resources
     self.__attributes = dict(attributes)
-    self.__attributes.update(hostname=hostname)
+
+  @property
+  @swagger.property
+  def id(self):
+    """
+    Agent ID
+
+    ---
+    type: str
+    read_only: true
+    example: 395d954b-555c-4a9c-beec-d67b6d673a20-S9
+    """
+    return self.__id
 
   @property
   @swagger.property
@@ -71,13 +85,14 @@ class Agent:
     example: 10.52.0.1
 
     """
-    return self.__attributes.get('hostname', None)
+    return self.__hostname
 
   @property
   @swagger.property
   def resources(self):
     """
     Resources available on the host
+
     ---
     type: HostResources
     read_only: true
@@ -101,9 +116,8 @@ class Agent:
     return dict(self.__attributes)
 
   def to_render(self):
-    return dict(hostname=self.hostname,
-                attributes=self.attributes,
-                resources=self.resources.to_render())
+    return dict(id=self.id, hostname=self.hostname,
+                attributes=self.attributes, resources=self.resources.to_render())
 
   def to_save(self):
     return self.to_render()
