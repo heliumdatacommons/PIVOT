@@ -187,30 +187,38 @@ class ContainerManager(Manager):
 
   async def _parse_job_state(self, body):
     assert isinstance(body, dict)
-    if 'task' not in body or not body['task']:
-      return dict(**body, state=ContainerState.PENDING)
-    task = body['task']
-    self.logger.info(json.dumps(task, indent=2))
-    state = dict(TASK_STARTING=ContainerState.RUNNING,
-                 TASK_RUNNING=ContainerState.RUNNING,
-                 TASK_FINISHED=ContainerState.SUCCESS,
-                 TASK_FAILED=ContainerState.FAILED,
-                 TASK_LOST=ContainerState.FAILED,
-                 TASK_ERROR=ContainerState.FAILED,
-                 TASK_STAGING=ContainerState.STAGING,
-                 TASK_KILLING=ContainerState.KILLED,
-                 TASK_KILLED=ContainerState.KILLED).get(task.get('state'),
-                                                        ContainerState.SUBMITTED)
+
+    def get_n_repeats(schedule):
+      n_repeats_str = schedule.split('/')[0].strip('R')
+      return int(n_repeats_str) if len(n_repeats_str) > 0 else -1
+
     deployment = Deployment()
+    res = dict(**body, state=ContainerState.PENDING, deployment=deployment)
+    if 'task' not in body or not body['task']:
+      return res
+    task, schedule = body['task'], body['schedule']
+    res['state'] = dict(TASK_STARTING=ContainerState.RUNNING,
+                        TASK_RUNNING=ContainerState.RUNNING,
+                        TASK_FINISHED=ContainerState.SUCCESS,
+                        TASK_FAILED=ContainerState.FAILED,
+                        TASK_LOST=ContainerState.FAILED,
+                        TASK_ERROR=ContainerState.FAILED,
+                        TASK_STAGING=ContainerState.STAGING,
+                        TASK_KILLING=ContainerState.KILLED,
+                        TASK_KILLED=ContainerState.KILLED).get(task.get('state'),
+                                                               ContainerState.SUBMITTED)
+    if res['state'] == ContainerState.SUCCESS and get_n_repeats(body['schedule']) != 0:
+      res['state'] = ContainerState.RUNNING
     hosts = await self.__cluster_db.find_agents(id=task.get('slave_id'))
     if not hosts:
       if task.get('slave_id'):
         self.logger.warning('Unrecognized agent ID: %s'%task.get('slave_id'))
-      return dict(**body, state=ContainerState.PENDING)
+      res.update(state=ContainerState.PENDING)
+      return res
     deployment.host = hosts[0].hostname
     deployment.cloud = hosts[0].attributes.get('cloud')
     deployment.add_ip_address(hosts[0].hostname)
-    return dict(**body, state=state, deployment=deployment)
+    return res
 
 
 class ServiceAPIManager(APIManager):
@@ -253,7 +261,7 @@ class JobAPIManager(APIManager):
     if err:
       return status, None, err
     task_id = body['taskId']
-    job = dict(id=job.id, appliance=job.appliance)
+    job = dict(id=job.id, appliance=job.appliance, schedule=body['schedule'])
     if not task_id:
       return status, job, None
     mesos = config.mesos

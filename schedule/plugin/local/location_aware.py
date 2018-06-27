@@ -26,7 +26,11 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
         if not data_obj: continue
         for r in await self.__api.get_replica_regions(data_obj.get('replicas', [])):
           regions[r] = regions.setdefault(r, 0) + data_obj.get('size', 0)
-      matched = [a for a in agents if a.attributes.get('region', None) in regions.keys()]
+      matched = [a for a in agents
+                 if a.attributes.get('region') in regions.keys()
+                 and a.resources.cpus >= c.resources.cpus
+                 and a.resources.mem >= c.resources.mem
+                 and a.resources.disk >= c.resources.disk]
       if not matched:
         self.logger.info("No matched agents found for '%s'"%c)
         return sched
