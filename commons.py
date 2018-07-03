@@ -1,5 +1,6 @@
 import sys
 import json
+import time
 import logging
 import tornado
 
@@ -82,6 +83,11 @@ class AsyncHttpClientWrapper(Loggable):
       if e.code == 599:
         return e.code, None, e.message
       return e.code, None, error(e.response.body.decode('utf-8'))
+    except (ConnectionRefusedError, ConnectionResetError):
+      self.logger.warning('Connection refused/reset, retry after 3 seconds')
+      time.sleep(3)
+      await self._fetch(host, port, endpoint, method, body, is_https, **headers)
+
 
 
 class Manager(Loggable, metaclass=Singleton):

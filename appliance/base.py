@@ -23,7 +23,7 @@ class Appliance:
     containers, contr_ids = [], set()
     for c in data['containers']:
       if c['id'] in contr_ids:
-        return 400, None, "Duplicate container id: %s"%c.id
+        return 400, None, "Duplicate container id: %s"%c['id']
       status, contr, err = Container.parse(dict(**c, appliance=data['id']))
       if err:
         return status, None, err

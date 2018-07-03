@@ -116,7 +116,7 @@ class Job(Container):
     parameters = [
       dict(key='privileged', value=self.is_privileged),
       dict(key='rm', value='true'),
-      dict(key='oom-kill-disable', value='true')
+      # dict(key='oom-kill-disable', value='true')
     ]
     parameters += [dict(key='publish',
                         value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))
