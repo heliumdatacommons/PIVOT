@@ -97,11 +97,11 @@ class ApplianceManager(Manager):
 
     return validate_dependencies(app.containers)
 
-  def _get_scheduler(self, scheduler_name):
+  def _get_scheduler(self, sched):
     try:
-      sched_mod = '.'.join(scheduler_name.split('.')[:-1])
-      sched_class = scheduler_name.split('.')[-1]
-      return getattr(importlib.import_module(sched_mod), sched_class)()
+      sched_mod = '.'.join(sched.name.split('.')[:-1])
+      sched_class = sched.name.split('.')[-1]
+      return getattr(importlib.import_module(sched_mod), sched_class)(sched.config)
     except Exception as e:
       self.logger.error(str(e))
       return schedule.local.DefaultApplianceScheduler()

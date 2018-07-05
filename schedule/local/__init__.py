@@ -47,6 +47,13 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
 
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
 
+  def __init__(self, config={}):
+    self.__config = dict(config)
+
+  @property
+  def config(self):
+    return dict(self.__config)
+
   async def schedule(self, app, agents):
     """
     Caution: the parameters should not be overridden by schedulers that extend

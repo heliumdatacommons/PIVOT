@@ -12,7 +12,7 @@ from argparse import ArgumentParser
 
 def parse_args():
   parser = ArgumentParser(description="Launch PIVOT")
-  parser.add_argument('--master', dest='master', type=str, default='zk-1.zk',
+  parser.add_argument('--master', dest='master', type=str, required=True,
                       help='Mesos/Marathon master host')
   parser.add_argument('--port', dest='port', type=int, default=9090,
                       help='PIVOT listen port')
@@ -26,11 +26,6 @@ def parse_args():
                       help='MongoDB listen port')
   parser.add_argument('--db_name', dest='db_name', type=str, default='pivot',
                       help='Database name')
-  parser.add_argument('--ha', action='store_true', help='Turn on HA mode')
-  parser.add_argument('--irods_api_host', dest='irods_api_host',
-                      type=str, help='iRODS API host')
-  parser.add_argument('--irods_api_port', dest='irods_api_port',
-                      type=int, help='iRODS API port')
 
   return parser.parse_args()
 
@@ -38,11 +33,10 @@ def parse_args():
 def create_pivot_config(args):
   pivot_cfg_f = '/opt/pivot/config.yml'
   pivot_cfg = yaml.load(open(pivot_cfg_f))
-  pivot_cfg['pivot'].update(master=args.master, port=args.port,
-                            n_parallel=args.n_parallel, ha=args.ha)
+  pivot_cfg['pivot'].update(master=args.master,
+                            port=args.port,
+                            n_parallel=args.n_parallel)
   pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port, name=args.db_name)
-  if args.irods_api_host and args.irods_api_port:
-    pivot_cfg['irods'] = dict(host=args.irods_api_host, port=args.irods_api_port)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
 

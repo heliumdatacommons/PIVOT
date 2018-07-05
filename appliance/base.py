@@ -1,6 +1,7 @@
 import swagger
 
 from container.base import Container, get_short_ids
+from schedule.base import Scheduler
 
 
 @swagger.model
@@ -45,10 +46,11 @@ class Appliance:
     return 200, app, None
 
   def __init__(self, id, containers=[],
-               scheduler='schedule.local.DefaultApplianceScheduler', **kwargs):
+               scheduler=Scheduler(name='schedule.local.DefaultApplianceScheduler'),
+               **kwargs):
     self.__id = id
     self.__containers = list(containers)
-    self.__scheduler = scheduler
+    self.__scheduler = scheduler if isinstance(scheduler, Scheduler) else Scheduler(**scheduler)
 
   @property
   @swagger.property
@@ -85,7 +87,7 @@ class Appliance:
     Appliance-level scheduler for the appliance
 
     ---
-    type: str
+    type: Scheduler
 
     """
     return self.__scheduler
@@ -95,11 +97,12 @@ class Appliance:
     self.__containers = list(contrs)
 
   def to_render(self):
-    return dict(id=self.id, scheduler=self.scheduler,
+    return dict(id=self.id,
+                scheduler=self.scheduler.to_render(),
                 containers=[c.to_render() for c in self.containers])
 
   def to_save(self):
-    return dict(id=self.id, scheduler=self.scheduler)
+    return dict(id=self.id, scheduler=self.scheduler.to_save())
 
   def __str__(self):
     return self.id

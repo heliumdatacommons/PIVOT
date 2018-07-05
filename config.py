@@ -61,12 +61,6 @@ class ExhibitorAPI(API):
     super(ExhibitorAPI, self).__init__(*args, **kwargs)
 
 
-class iRODSAPI(API):
-
-  def __init__(self, port=0, *args, **kwargs):
-    kwargs.update(port=port, endpoint='/v1')
-    super(iRODSAPI, self).__init__(*args, **kwargs)
-
 
 class GeneralConfig:
 
@@ -145,18 +139,16 @@ class Configuration:
                          mesos=MesosAPI(**cfg.get('mesos', {})),
                          marathon=MarathonAPI(**cfg.get('marathon', {})),
                          chronos=ChronosAPI(**cfg.get('chronos', {})),
-                         exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})),
-                         irods=iRODSAPI(**cfg.get('irods', {})))
+                         exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})))
 
   def __init__(self, pivot, db, mesos=None, marathon=None, chronos=None,
-               exhibitor=None, irods=None, *args, **kwargs):
+               exhibitor=None, *args, **kwargs):
     self.__pivot = pivot
     self.__db = db
     self.__mesos = mesos
     self.__marathon = marathon
     self.__chronos = chronos
     self.__exhibitor = exhibitor
-    self.__irods = irods
 
   @property
   def pivot(self):
@@ -181,10 +173,6 @@ class Configuration:
   @property
   def exhibitor(self):
     return self.__exhibitor
-
-  @property
-  def irods(self):
-    return self.__irods
 
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))

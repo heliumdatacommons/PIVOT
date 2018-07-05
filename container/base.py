@@ -849,6 +849,7 @@ class Deployment:
     ---
     type: str
     read_only: true
+    example: aws
 
     """
     return self.__cloud
@@ -861,6 +862,7 @@ class Deployment:
     ---
     type: str
     read_only: true
+    example: 10.52.0.32
 
     """
     return self.__host
