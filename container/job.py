@@ -96,7 +96,7 @@ class Job(Container):
     r = dict(name=str(self),
              schedule='R%d/%s/P%s'%(self.repeats, self.start_time, self.interval),
              cpus=self.resources.cpus, mem=self.resources.mem, disk=self.resources.disk,
-             shell=not self.args,
+             shell=bool(self.cmd),
              command = self.cmd if self.cmd else '',
              retries=self.retries,
              environmentVariables=[dict(name=k,

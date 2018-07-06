@@ -32,7 +32,7 @@ class ClusterManager(Manager):
     if not self.__cluster_monitor.last_update:
       return True
     ttl = datetime.timedelta(seconds=ttl)
-    return self.__cluster_monitor.last_update - datetime.datetime.now(tz=None) > ttl
+    return datetime.datetime.now(tz=None) - self.__cluster_monitor.last_update > ttl
 
 
 class ClusterMonitor(AutonomousMonitor):
