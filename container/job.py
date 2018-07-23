@@ -122,6 +122,10 @@ class Job(Container):
                         value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))
                    for p in self.ports]
     r['container']['parameters'] = parameters
+    if self.host:
+      r.setdefault('constraints', []).append(['hostname', 'EQUALS', str(self.host)])
+    if self.cloud:
+      r.setdefault('constraints', []).append(['cloud', 'EQUALS', str(self.cloud)])
     for k, v in self.schedule.constraints.items():
       r.setdefault('constraints', []).append([str(k), 'EQUALS', str(v)])
     return r
