@@ -170,7 +170,7 @@ class Service(Container):
     type: dict
     default: {}
     example:
-      region: us-east
+      region: us-east1
     """
     return dict(self.__labels)
 
@@ -238,15 +238,20 @@ class Service(Container):
                 minimum_capacity=self.minimum_capacity)
 
   def to_request(self):
+
+    def merge_env():
+      env = self._get_default_env()
+      env.update({k: parse_container_short_id(v, self.appliance)
+                  for k, v in self.env.items()})
+      return env
+
     self._add_default_health_check()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
-             env=dict(**self._get_default_env(),
-                      **{k: parse_container_short_id(v, self.appliance)
-                         for k, v in self.env.items()}),
+             env=merge_env(),
              labels=self.labels,
              requirePorts=len(self.ports) > 0,
-             acceptedResourceRoles=["slave_public", "*" ],
+             acceptedResourceRoles=["slave_public", "*"],
              container=dict(type='DOCKER',
                             volumes=[v.to_request() for v in self.volumes],
                             docker=dict(image=self.image,

@@ -80,7 +80,7 @@ class Volume:
 
   """
 
-  def __init__(self, container_path, host_path, mode, *args, **kwargs):
+  def __init__(self, container_path, host_path, mode='RW', *args, **kwargs):
     self.__container_path = container_path
     self.__host_path = host_path
     self.__mode = mode

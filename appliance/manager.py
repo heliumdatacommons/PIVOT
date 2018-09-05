@@ -22,12 +22,6 @@ class ApplianceManager(Manager):
       return status, app, err
     app = Appliance(**app)
     status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
-    if not app.containers:
-      self.logger.info("Empty appliance '%s', deleting"%app_id)
-      status, msg, err = await self.delete_appliance(app_id)
-      if err:
-        self.logger.info(err)
-      return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
   async def get_appliances(self, **filters):
