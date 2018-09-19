@@ -133,8 +133,8 @@ class Volume:
     return self.to_render()
 
   def to_request(self):
-    return dict(containerPath=self.__container_path,
-                hostPath=self.container_path,
+    return dict(containerPath=self.container_path,
+                hostPath=self.host_path,
                 mode=self.mode)
 
 
@@ -889,15 +889,13 @@ class Deployment:
     return dict(ip_addresses=self.ip_addresses, cloud=self.cloud, host=self.host)
 
 
-short_id_pattern = r'@(%s)'%Container.ID_PATTERN
-
-
 def get_short_ids(p):
-  return re.compile(short_id_pattern).findall(p) if p else []
+  return re.compile(r'[^\\]+@(%s)'%Container.ID_PATTERN).findall(p) if p else []
 
 
 def parse_container_short_id(p, appliance):
-  return re.sub(r'([^@]*)%s([^@]*)'%short_id_pattern,
-                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory\3'%appliance,
-                str(p))
-
+  if p and p[0] == '@': # add a sentinel
+    p = ' ' + p
+  return re.sub(r'([^@\\]+)@(%s)'%Container.ID_PATTERN,
+                r'\1\2-%s.marathon.containerip.dcos.thisdcos.directory'%appliance,
+                str(p)).strip().replace('\\@', '@')

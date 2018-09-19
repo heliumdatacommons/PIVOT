@@ -11,7 +11,7 @@ class HealthCheck:
   """
 
   def __init__(self, path='/', protocol='MESOS_TCP', port_index=0, max_consecutive_failures=3,
-               grace_period_seconds=300, interval_seconds=60, timeout_seconds=20):
+               grace_period_seconds=300, interval_seconds=60, timeout_seconds=20, command=None):
     self.__path = path
     self.__protocol = protocol
     self.__port_index = port_index
@@ -19,6 +19,7 @@ class HealthCheck:
     self.__grace_period_seconds = grace_period_seconds
     self.__interval_seconds = interval_seconds
     self.__timeout_seconds = timeout_seconds
+    self.__command = command
 
   @property
   @swagger.property
@@ -114,22 +115,41 @@ class HealthCheck:
     """
     return self.__timeout_seconds
 
+  @property
+  @swagger.property
+  def command(self):
+    """
+    Command for health check
+    ---
+    type: str
+    default: None
+    example: ping -w5 -c1 foo.bar
+
+    """
+    return self.__command
+
   def to_render(self):
     return dict(path=self.path, protocol=self.protocol, port_index=self.port_index,
                 max_consecutive_failures=self.max_consecutive_failures,
                 grace_period_seconds=self.grace_period_seconds,
                 interval_seconds=self.interval_seconds,
-                timeout_seconds=self.timeout_seconds)
+                timeout_seconds=self.timeout_seconds,
+                command=self.command)
 
   def to_save(self):
     return self.to_render()
 
   def to_request(self):
-    return dict(path=self.path, protocol=self.protocol, portIndex=self.port_index,
+    base = dict(protocol=self.protocol,
                 maxConsecutiveFailures=self.max_consecutive_failures,
                 gracePeriodSeconds=self.grace_period_seconds,
                 intervalSeconds=self.interval_seconds,
                 timeoutSeconds=self.timeout_seconds)
+    if self.protocol == 'COMMAND':
+      base.update(command=dict(value=self.command))
+    else:
+      base.update(path=self.path, protocol=self.protocol, portIndex=self.port_index)
+    return base
 
 
 @swagger.model
@@ -245,6 +265,12 @@ class Service(Container):
                   for k, v in self.env.items()})
       return env
 
+    if self.health_check:
+      health_check = dict(self.health_check.to_request())
+      if self.health_check.protocol == 'COMMAND':
+        health_check['command']['value'] = parse_container_short_id(health_check['command']['value'],
+                                                                    self.appliance)
+
     self._add_default_health_check()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
@@ -261,7 +287,7 @@ class Service(Container):
                                           dict(key='rm', value='true'),
                                           dict(key='oom-kill-disable', value='true')]
                                         )),
-             healthChecks=[self.health_check.to_request()] if self.health_check else [],
+             healthChecks=[health_check] if self.health_check else [],
              upgradeStrategy=dict(
                minimumHealthCapacity=self.minimum_capacity,
                maximumOverCapacity=1.))
