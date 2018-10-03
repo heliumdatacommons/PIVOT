@@ -1,4 +1,5 @@
 import re
+import json
 import swagger
 
 from enum import Enum
@@ -465,7 +466,7 @@ class Container:
     self.__args = [a and str(a) for a in args]
     if self.__cmd and self.__args:
       raise ValueError("Cannot specify both 'cmd' and 'args'")
-    self.__env = {k: v and str(v) for k, v in env.items()}
+    self.__env = {k: v if v and isinstance(v, str) else json.dumps(v) for k, v in env.items()}
     self.__volumes = [Volume(**v) for v in volumes]
     self.__network_mode = network_mode if isinstance(network_mode, NetworkMode) \
                       else NetworkMode(network_mode.upper())
