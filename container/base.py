@@ -145,11 +145,12 @@ class Endpoint:
 
   """
 
-  def __init__(self, host, container_port, host_port, protocol='tcp', *args, **kwargs):
+  def __init__(self, host, container_port, host_port, protocol='tcp', name=None, *args, **kwargs):
     self.__host = host
     self.__host_port = host_port
     self.__container_port = container_port
     self.__protocol = protocol
+    self.__name = name
 
   @property
   @swagger.property
@@ -205,9 +206,24 @@ class Endpoint:
     """
     return self.__protocol
 
+  @property
+  @swagger.property
+  def name(self):
+    """
+    The descriptive name of the endpoint
+    ---
+    type: str
+    example: Jupyter Notebook
+    """
+    return self.__name
+
+  @name.setter
+  def name(self, name):
+    self.__name = name
+
   def to_render(self):
     return dict(host=self.__host, host_port=self.__host_port,
-                container_port=self.__container_port, protocol=self.__protocol)
+                container_port=self.__container_port, protocol=self.__protocol, name=self.__name)
 
   def to_save(self):
     return self.to_render()
@@ -223,10 +239,11 @@ class Port:
 
   """
 
-  def __init__(self, container_port, host_port=0, protocol='tcp', *args, **kwargs):
+  def __init__(self, container_port, host_port=0, protocol='tcp', name=None, *args, **kwargs):
     self.__container_port = container_port
     self.__host_port = host_port
     self.__protocol = protocol
+    self.__name = name
 
   @property
   @swagger.property
@@ -272,9 +289,14 @@ class Port:
     """
     return self.__protocol
 
+  @property
+  @swagger.property
+  def name(self):
+    return self.__name
+
   def to_render(self):
     return dict(container_port=self.container_port, host_port=self.host_port,
-                protocol=self.protocol)
+                protocol=self.protocol, name=self.name)
 
   def to_save(self):
     return self.to_render()

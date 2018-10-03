@@ -1,6 +1,5 @@
 from tornado.escape import url_escape
 
-from config import config
 from commons import APIManager
 from schedule.local import DefaultApplianceScheduler
 
@@ -27,6 +26,7 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
       resource_names = set([repl['resource_name'] for d in data_objs.values()
                             for repl in d['replicas']])
       resources = {r['name']: r for r in await self.__api.get_resources(resource_names)}
+    agent_resources = {a: a.to_render()['resources'] for a in agents}
     for c in sched.containers:
       if not c.data or not c.data.input: continue
       regions = {}
@@ -37,9 +37,8 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
           r = resources.get(repl['resource_name'])
           if r:
             regions[r['region']] = regions.setdefault(r['region'], 0) + data_obj['size']
-      matched = [a for a in agents
-                 if a.attributes.get('region') in regions]
-      if not matched:
+      matched = [a for a in agents if a.attributes.get('region') in regions]
+      if not matched and self.config.get('scale', False):
         self.logger.info("No matched agents found for '%s'"%c)
         continue
       self.logger.info('Candidate regions:')
@@ -48,9 +47,45 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
         data_size = regions[region]
         self.logger.info('\t%s, %s, data size: %d'%(region, cloud, data_size))
       agent = max(agents, key=lambda a: regions.get(a.attributes.get('region'), 0))
-      self.logger.info("Container '%s' will land on %s (%s, %s)"%(
+      if agent_resources[agent]['cpus'] < c.resources.cpus \
+          or agent_resources[agent]['mem'] < c.resources.mem \
+          or agent_resources[agent]['disk'] < c.resources.disk:
+        self.logger.info('Scale option: %s'%self.config.get('scale', False))
+        if self.config['scale']:
+          self.logger.info('Look up nearby agents in the same Cloud')
+          intra_cloud = [a for a in agents
+                         if a.hostname != agent.hostname
+                         and a.attributes.get('cloud') == agent.attributes.get('cloud')
+                         and agent_resources[a]['cpus'] >= c.resources.cpus \
+                         and agent_resources[a]['mem'] >= c.resources.mem \
+                         and agent_resources[a]['disk'] >= c.resources.disk]
+          if intra_cloud:
+
+            def compare_prefix(a, b):
+              max_len = min(len(a), len(b))
+              for i in range(max_len):
+                if a[i] != b[i]: return i
+              return max_len
+
+            agent = max(intra_cloud,
+                        key=lambda x: compare_prefix(x.attributes.get('region'),
+                                                     agent.attributes.get('region')))
+          else:
+            cross_cloud = [a for a in agents
+                           if a.attributes.get('cloud') != agent.attributes.get('cloud')
+                           and agent_resources[a]['cpus'] >= c.resources.cpus \
+                           and agent_resources[a]['mem'] >= c.resources.mem \
+                           and agent_resources[a]['disk'] >= c.resources.disk]
+            agent = cross_cloud[0] if cross_cloud else agent
+        else:
+          self.logger.info('Queue up to wait for resources on %s'%agent.hostname)
+      if agent:
+        self.logger.info("Container '%s' will land on %s (%s, %s)"%(
         c.id, agent.hostname, agent.attributes['region'], agent.attributes['cloud']))
-      c.schedule.add_constraint('hostname', agent.hostname)
+        c.schedule.add_constraint('hostname', agent.hostname)
+        agent_resources[agent]['cpus'] -= c.resources.cpus
+        agent_resources[agent]['mem'] -= c.resources.mem
+        agent_resources[agent]['disk'] -= c.resources.disk
     return sched
 
   async def _get_data_object(self, lfn):

@@ -284,6 +284,7 @@ class Service(Container):
                                         privileged=self.is_privileged,
                                         forcePullImage=self.force_pull_image,
                                         parameters=[
+                                          dict(key='hostname', value=str(self.id)),
                                           dict(key='rm', value='true'),
                                           dict(key='oom-kill-disable', value='true')]
                                         )),

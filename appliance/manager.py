@@ -150,12 +150,18 @@ class ApplianceDeletionChecker(AutonomousMonitor):
     self.__app_id = app_id
     self.__app_api = ApplianceAPIManager()
     self.__app_db = ApplianceDBManager()
+    self.__contr_mgr = ContainerManager()
 
   async def callback(self):
     status, _, err = await self.__app_api.get_appliance(self.__app_id)
     if status == 200:
       self.logger.info("Appliance '%s' still exists, deleting"%self.__app_id)
       await self.__app_api.deprovision_appliance(self.__app_id)
+      return
+    _, contrs, _ = await self.__contr_mgr.get_containers(appliance=self.__app_id)
+    if contrs:
+      self.logger.info("Found obsolete container(s) of appliance '%s', deleting"%self.__app_id)
+      await self.__contr_mgr.delete_containers(appliance=self.__app_id)
       return
     if status == 404:
       self.logger.info("Delete appliance '%s' from database"%self.__app_id)

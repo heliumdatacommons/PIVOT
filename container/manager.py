@@ -37,8 +37,8 @@ class ContainerManager(Manager):
         self.logger.error(err)
     return 200, contr, None
 
-  async def get_containers(self, ttl=0, **kwargs):
-    contrs = await self.__contr_db.get_containers(**kwargs)
+  async def get_containers(self, ttl=0, **filters):
+    contrs = await self.__contr_db.get_containers(**filters)
     contrs_to_del, contrs_to_update = [], [],
     cur_time = datetime.datetime.now(tz=None)
     for c in contrs:
@@ -58,7 +58,7 @@ class ContainerManager(Manager):
         self.logger.info(msg)
     for c in contrs_to_update:
       c.last_update = datetime.datetime.now(tz=None)
-      await self.save_container(c)
+      await self.save_container(c, upsert=False)
     return 200, contrs, None
 
   async def create_container(self, data):
@@ -75,21 +75,23 @@ class ContainerManager(Manager):
     status, contr, err = await self.__contr_db.get_container(app_id, contr_id)
     if status == 404:
       return status, None, err
-    if contr.state != ContainerState.SUBMITTED:
-      if contr.type == ContainerType.SERVICE:
-        status, msg, err = await self.__service_api.deprovision_service(contr)
-        if err:
-          self.logger.error(err)
-        else:
-          self.logger.info(msg)
-      elif contr.type == ContainerType.JOB:
-        _, _, kill_job_err = await self.__job_api.kill_job(contr)
-        if kill_job_err:
-          self.logger.error(kill_job_err)
-        _, _, del_job_err = await self.__job_api.delete_job(contr)
-        if del_job_err:
-          self.logger.error(del_job_err)
-    await self.__contr_db.delete_container(contr)
+    if contr.type == ContainerType.SERVICE:
+      status, msg, err = await self.__service_api.deprovision_service(contr)
+      if status == 404:
+        await self.__contr_db.delete_container(contr)
+      elif status != 200:
+        self.logger.error(err)
+      else:
+        self.logger.info(msg)
+    elif contr.type == ContainerType.JOB:
+      status, _, kill_job_err = await self.__job_api.kill_job(contr)
+      if status != 404 and kill_job_err:
+        self.logger.error(kill_job_err)
+      status, _, del_job_err = await self.__job_api.delete_job(contr)
+      if status != 404 and del_job_err:
+        self.logger.error(del_job_err)
+      if status == 404:
+        await self.__contr_db.delete_container(contr)
     return 200, "Container '%s' is being deleted"%contr, None
 
   async def delete_containers(self, **filters):
@@ -141,6 +143,10 @@ class ContainerManager(Manager):
       err = "Unknown container type: %s"%contr.type
       self.logger.warn(err)
       return 400, None, err
+    # add descriptive names to the endpoints
+    for i, p in enumerate(contr.ports):
+      if i >= len(contr.endpoints): break
+      contr.endpoints[i].name = p.name
     return status, contr, err
 
   async def _parse_service_state(self, body):
@@ -166,15 +172,14 @@ class ContainerManager(Manager):
         hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
         host, cloud = hosts[0], hosts[0].attributes.get('cloud')
-        public_ip = host.attributes.get('public_ip')
-        if not public_ip: continue
+        hostname = host.attributes.get('fqdn') or host.attributes.get('public_ip')
+        if not hostname: continue
         if 'portDefinitions' in body:
           for i, p in enumerate(body['portDefinitions']):
-            endpoints += [Endpoint(public_ip, p['port'], t['ports'][i], p['protocol'])]
+            endpoints += [Endpoint(hostname, p['port'], t['ports'][i], p['protocol'])]
         else:
           for i, p in enumerate(body['container']['portMappings']):
-            endpoints += [Endpoint(public_ip, p['containerPort'], t['ports'][i],
-                                   p['protocol'])]
+            endpoints += [Endpoint(hostname, p['containerPort'], t['ports'][i], p['protocol'])]
         # parse virtual IP addresses
         for ip in t['ipAddresses']:
           if ip['protocol'] != 'IPv4':
@@ -219,6 +224,7 @@ class ContainerManager(Manager):
     deployment.cloud = hosts[0].attributes.get('cloud')
     deployment.add_ip_address(hosts[0].hostname)
     return res
+
 
 
 class ServiceAPIManager(APIManager):
