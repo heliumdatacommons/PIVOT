@@ -50,7 +50,8 @@ class ContainerManager(Manager):
       if status == 200:
         contrs_to_update.append(c)
     if contrs_to_del:
-      filters = dict(id={'$in': [c.id for c in contrs_to_del]})
+      filters = dict(id={'$in': [c.id for c in contrs_to_del]},
+                     appliance=contrs_to_del[0].appliance)
       status, msg, err = await self.__contr_db.delete_containers(**filters)
       if err:
         self.logger.error(err)

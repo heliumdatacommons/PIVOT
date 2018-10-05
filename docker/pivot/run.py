@@ -26,6 +26,8 @@ def parse_args():
                       help='MongoDB listen port')
   parser.add_argument('--db_name', dest='db_name', type=str, default='pivot',
                       help='Database name')
+  parser.add_argument('--https', action='store_true', dest='https',
+                      help='Whether to enable HTTPS')
 
   return parser.parse_args()
 
@@ -35,7 +37,8 @@ def create_pivot_config(args):
   pivot_cfg = yaml.load(open(pivot_cfg_f))
   pivot_cfg['pivot'].update(master=args.master,
                             port=args.port,
-                            n_parallel=args.n_parallel)
+                            n_parallel=args.n_parallel,
+                            https=args.https)
   pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port, name=args.db_name)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 

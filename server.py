@@ -44,7 +44,10 @@ def start_server():
     (r'/api', SwaggerAPIHandler),
     (r'/api/ui', SwaggerUIHandler),
   ])
-  server = tornado.httpserver.HTTPServer(app)
+  ssl_options = {}
+  if config.pivot.https:
+    ssl_options.update(certfile='/etc/pivot/server.pem', keyfile='/etc/pivot/server.key')
+  server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_options)
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
   start_cluster_monitor()

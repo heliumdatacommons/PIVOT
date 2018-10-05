@@ -800,15 +800,17 @@ class Container:
   def to_render(self):
     return dict(id=self.id, appliance=self.appliance, type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
-                cmd=self.cmd, args=self.args, env=self.env,
-                volumes=[v.to_render() for v in self.volumes],
-                network_mode=self.network_mode.value,
+                #cmd=self.cmd, args=self.args, env=self.env,
+                #volumes=[v.to_render() for v in self.volumes],
+                #network_mode=self.network_mode.value,
                 endpoints=[e.to_render() for e in self.endpoints],
-                ports=[p.to_render() for p in self.ports],
-                state=self.state.value, is_privileged=self.is_privileged,
-                force_pull_image=self.force_pull_image, dependencies=self.dependencies,
+                #ports=[p.to_render() for p in self.ports],
+                state=self.state.value,
+                #is_privileged=self.is_privileged,
+                #force_pull_image=self.force_pull_image,
+                dependencies=self.dependencies,
                 data=self.data and self.data.to_render(),
-                cloud=self.cloud, host=self.host,
+                #cloud=self.cloud, host=self.host,
                 deployment=self.deployment and self.deployment.to_render())
 
   def to_save(self):

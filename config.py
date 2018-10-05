@@ -61,16 +61,15 @@ class ExhibitorAPI(API):
     super(ExhibitorAPI, self).__init__(*args, **kwargs)
 
 
-
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
-               scheduler='schedule.DefaultGlobalScheduler', ha=False, *args, **kwargs):
+               scheduler='schedule.DefaultGlobalScheduler', https=False, *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel
     self.__scheduler = scheduler
-    self.__ha = ha
+    self.__https = https
 
   @property
   def master(self):
@@ -93,8 +92,8 @@ class GeneralConfig:
     return self.__scheduler
 
   @property
-  def ha(self):
-    return self.__ha
+  def https(self):
+    return self.__https
 
 
 class DatabaseConfig:

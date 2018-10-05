@@ -50,17 +50,6 @@ class ClusterMonitor(AutonomousMonitor):
     return self.__last_update
 
   async def update(self):
-    if config.pivot.ha:
-      leader = await self._discover_leader()
-      if leader.hostname != config.exhibitor.host:
-        self.logger.info('Current leader: %s'%leader.hostname)
-        self._update_config(leader.hostname)
-      status, masters, err = await self.__api.get_masters()
-      if status == 200:
-        for m in masters:
-          await self.__master_db.update_master(m)
-      else:
-        self.logger.error('Failed to query masters')
     await self._discover_chronos()
     status, agents, err = await self.__api.get_agents()
     if status == 200:
