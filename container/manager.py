@@ -246,7 +246,7 @@ class ServiceAPIManager(APIManager):
 
   async def provision_service(self, service):
     api = config.marathon
-    endpoint = '%s/apps'%api.endpoint
+    endpoint = '%s/apps?force=true'%api.endpoint
     body = dict(service.to_request())
     return await self.http_cli.post(api.host, api.port, endpoint, body)
 

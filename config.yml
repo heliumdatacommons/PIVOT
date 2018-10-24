@@ -2,7 +2,7 @@ pivot:
   master: m1.dcos
   port: 9191
   n_parallel: 8
-  https: true
+  https: false
 db:
   host: localhost
   port: 27017

@@ -1,6 +1,7 @@
 import tornado
 
 from tornado.web import Application, StaticFileHandler
+from tornado.httpserver import HTTPServer
 
 
 from appliance.base import Appliance
@@ -30,23 +31,23 @@ def start_global_scheduler():
 def start_server():
   app = Application([
     (r'\/*', IndexHandler),
-    (r'/ping', PingHandler),
-    (r'/cluster', ClusterInfoHandler),
-    (r'/appliance', AppliancesHandler),
-    (r'/appliance/(%s\/*)'%Appliance.ID_PATTERN, ApplianceHandler),
-    (r'/appliance/(%s\/*)/container'%Appliance.ID_PATTERN, ContainersHandler),
-    (r'/appliance/(%s\/*)/service'%Appliance.ID_PATTERN, ServicesHandler),
-    (r'/appliance/(%s\/*)/job'%Container.ID_PATTERN, JobsHandler),
-    (r'/appliance/(%s\/*)/ui'%Appliance.ID_PATTERN, ApplianceUIHandler),
-    (r'/appliance/(%s\/*)/container/(%s\/*)'%(Appliance.ID_PATTERN,
+    (r'/ping\/*', PingHandler),
+    (r'/cluster\/*', ClusterInfoHandler),
+    (r'/appliance\/*', AppliancesHandler),
+    (r'/appliance/(%s)\/*'%Appliance.ID_PATTERN, ApplianceHandler),
+    (r'/appliance/(%s)/container\/*'%Appliance.ID_PATTERN, ContainersHandler),
+    (r'/appliance/(%s)/service\/*'%Appliance.ID_PATTERN, ServicesHandler),
+    (r'/appliance/(%s)/job\/*'%Container.ID_PATTERN, JobsHandler),
+    (r'/appliance/(%s)/ui\/*'%Appliance.ID_PATTERN, ApplianceUIHandler),
+    (r'/appliance/(%s)/container/(%s)\/*'%(Appliance.ID_PATTERN,
                                               Container.ID_PATTERN), ContainerHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
     (r'/api', SwaggerAPIHandler),
     (r'/api/ui', SwaggerUIHandler),
   ])
-  ssl_options = {}
+  ssl_options = None
   if config.pivot.https:
-    ssl_options.update(certfile='/etc/pivot/server.pem', keyfile='/etc/pivot/server.key')
+    ssl_options = dict(certfile='/etc/pivot/server.pem', keyfile='/etc/pivot/server.key')
   server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_options)
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)

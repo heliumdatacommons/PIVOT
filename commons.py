@@ -1,12 +1,12 @@
 import sys
 import json
-import time
 import logging
 import tornado
 
 from abc import ABCMeta, abstractmethod
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
+from tornado.gen import sleep
 from motor.motor_tornado import MotorClient
 
 from util import error, dirname
@@ -85,7 +85,7 @@ class AsyncHttpClientWrapper(Loggable):
       return e.code, None, error(e.response.body.decode('utf-8'))
     except (ConnectionRefusedError, ConnectionResetError):
       self.logger.warning('Connection refused/reset, retry after 3 seconds')
-      time.sleep(3)
+      sleep(3)
       return await self._fetch(host, port, endpoint, method, body, is_https, **headers)
 
 
