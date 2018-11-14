@@ -97,6 +97,7 @@ class Manager(Loggable, metaclass=Singleton):
 class APIManager(Manager):
 
   def __init__(self):
+    super(APIManager, self).__init__()
     self.http_cli = AsyncHttpClientWrapper()
 
 

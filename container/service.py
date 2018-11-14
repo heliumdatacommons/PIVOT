@@ -1,6 +1,7 @@
 import swagger
 
-from container.base import Container, NetworkMode, parse_container_short_id
+from container import Container, NetworkMode, parse_container_short_id
+from config import config
 
 
 @swagger.model
@@ -229,8 +230,7 @@ class Service(Container):
     ---
     type: float
     minimum: 0.0
-    maximum: 1.0
-    default: 1.0
+    default: 0.0
     example: 1.0
 
     """
@@ -265,6 +265,17 @@ class Service(Container):
                   for k, v in self.env.items()})
       return env
 
+    def parameters():
+      params = [dict(key='hostname', value=str(self.id)),
+                dict(key='rm', value='true'),
+                dict(key='oom-kill-disable', value='true')]
+      params += [
+                 dict(key='volume-driver', value=config.ceph.volume_driver),
+                 dict(key='volume', value='alpha:/tmp'),
+                 dict(key='volume', value='beta:/mnt')
+                ]
+      return params
+
     if self.health_check:
       health_check = dict(self.health_check.to_request())
       if self.health_check.protocol == 'COMMAND':
@@ -283,11 +294,7 @@ class Service(Container):
                             docker=dict(image=self.image,
                                         privileged=self.is_privileged,
                                         forcePullImage=self.force_pull_image,
-                                        parameters=[
-                                          dict(key='hostname', value=str(self.id)),
-                                          dict(key='rm', value='true'),
-                                          dict(key='oom-kill-disable', value='true')]
-                                        )),
+                                        parameters=parameters())),
              healthChecks=[health_check] if self.health_check else [],
              upgradeStrategy=dict(
                minimumHealthCapacity=self.minimum_capacity,

@@ -1,8 +1,8 @@
 import json
-import tornado
 import swagger
 
 from tornado.web import RequestHandler
+from tornado.escape import json_decode
 
 from appliance.manager import ApplianceManager
 from container.manager import ContainerManager
@@ -43,7 +43,7 @@ class AppliancesHandler(RequestHandler, Loggable):
             schema: Error
     """
     try:
-      data = tornado.escape.json_decode(self.request.body)
+      data = json_decode(self.request.body)
       status, app, err = await self.__app_mgr.create_appliance(data)
       self.set_status(status)
       self.write(json.dumps(app.to_render() if status == 201 else error(err)))

@@ -1,7 +1,7 @@
 import swagger
 
-from container.base import Container, get_short_ids
-from schedule.base import Scheduler
+from container import Container, get_short_ids
+from schedule import Scheduler
 
 
 @swagger.model
@@ -45,11 +45,12 @@ class Appliance:
                     **{k: v for k, v in data.items() if k not in ('containers', )})
     return 200, app, None
 
-  def __init__(self, id, containers=[],
+  def __init__(self, id, containers=[], volumes=[],
                scheduler=Scheduler(name='schedule.local.DefaultApplianceScheduler'),
                **kwargs):
     self.__id = id
     self.__containers = list(containers)
+    self.__volumes = list(volumes)
     self.__scheduler = scheduler if isinstance(scheduler, Scheduler) else Scheduler(**scheduler)
 
   @property
@@ -79,6 +80,20 @@ class Appliance:
 
     """
     return self.__containers
+
+  @property
+  @swagger.property
+  def volumes(self):
+    """
+    Persistent volumes shared among containers in the appliance
+
+    ---
+    type: list
+    items: Volume
+    required: true
+
+    """
+    return self.__volumes
 
   @property
   @swagger.property

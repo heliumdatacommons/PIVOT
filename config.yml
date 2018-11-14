@@ -15,5 +15,9 @@ chronos:
   port: 9090
 exhibitor:
   port: 8181
+ceph:
+  host: localhost
+  port: 8080
+
 
 

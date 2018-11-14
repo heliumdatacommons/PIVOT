@@ -7,7 +7,7 @@ from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
 from cluster.manager import AgentDBManager
-from container.base import Container, ContainerType, ContainerState, Endpoint, Deployment
+from container import Container, ContainerType, ContainerState, Endpoint, Deployment
 
 
 class ContainerManager(Manager):
@@ -63,19 +63,19 @@ class ContainerManager(Manager):
     return 200, contrs, None
 
   async def create_container(self, data):
-    status, _, _ = await self.__contr_db.get_container(data['appliance'], data['id'])
-    if status == 200:
-      return 409, None, "Container '%s' already exists"%data['id']
     status, contr, err = Container.parse(data)
-    if err:
+    if status != 200:
       return status, None, err
+    status, _, _ = await self.__contr_db.get_container(contr.appliance, contr.id)
+    if status == 200:
+      return 409, None, "Container '%s' already exists"%contr.id
     await self.save_container(contr, True)
     return 201, contr, None
 
   async def delete_container(self, app_id, contr_id):
     status, contr, err = await self.__contr_db.get_container(app_id, contr_id)
     if status == 404:
-      return status, None, err
+      return status, contr, err
     if contr.type == ContainerType.SERVICE:
       status, msg, err = await self.__service_api.deprovision_service(contr)
       if status == 404:
@@ -152,7 +152,7 @@ class ContainerManager(Manager):
 
   async def _parse_service_state(self, body):
     if isinstance(body, str):
-      body = json.loads(body.decode('utf-8'))
+      body = json.loads(str(body, 'utf-8'))
     body = body['app']
     tasks, min_capacity = body['tasks'], body['upgradeStrategy']['minimumHealthCapacity']
     # parse state
@@ -325,5 +325,5 @@ class ContainerDBManager(Manager):
   async def _get_container(self, **filters):
     contr = await self.__contr_col.find_one(filters)
     if not contr:
-      return 404, None, 'Container matches %s is not found'%filters
+      return 404, None, "Container matching '%s' is not found"%filters
     return Container.parse(contr)

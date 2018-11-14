@@ -1,7 +1,7 @@
 import datetime
 
 from config import config
-from cluster.base import Master, Agent, AgentResources
+from cluster import Master, Agent, AgentResources
 from commons import MongoClient, AutonomousMonitor
 from commons import APIManager, Manager
 

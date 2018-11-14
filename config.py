@@ -61,6 +61,13 @@ class ExhibitorAPI(API):
     super(ExhibitorAPI, self).__init__(*args, **kwargs)
 
 
+class CephAPI(API):
+
+  def __init__(self, port=8080, *args, **kwargs):
+    kwargs.update(port=port, endpoint='/')
+    super(CephAPI, self).__init__(*args, **kwargs)
+
+
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
@@ -138,16 +145,18 @@ class Configuration:
                          mesos=MesosAPI(**cfg.get('mesos', {})),
                          marathon=MarathonAPI(**cfg.get('marathon', {})),
                          chronos=ChronosAPI(**cfg.get('chronos', {})),
-                         exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})))
+                         exhibitor=ExhibitorAPI(**cfg.get('exhibitor', {})),
+                         ceph=CephAPI(**cfg.get('ceph', {})))
 
   def __init__(self, pivot, db, mesos=None, marathon=None, chronos=None,
-               exhibitor=None, *args, **kwargs):
+               exhibitor=None, ceph=None, *args, **kwargs):
     self.__pivot = pivot
     self.__db = db
     self.__mesos = mesos
     self.__marathon = marathon
     self.__chronos = chronos
     self.__exhibitor = exhibitor
+    self.__ceph = ceph
 
   @property
   def pivot(self):
@@ -173,6 +182,10 @@ class Configuration:
   def exhibitor(self):
     return self.__exhibitor
 
+  @property
+  def ceph(self):
+    return self.__ceph
+
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))
 
@@ -184,5 +197,5 @@ def get_global_scheduler():
     return getattr(importlib.import_module(sched_mod), sched_class)()
   except Exception as e:
     sys.stderr.write(str(e) + '\n')
-    from schedule import DefaultGlobalScheduler
+    from schedule.universal import DefaultGlobalScheduler
     return DefaultGlobalScheduler()

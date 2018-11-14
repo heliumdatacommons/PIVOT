@@ -1,8 +1,9 @@
-import appliance
+import appliance.manager
 
 from abc import ABCMeta
 
-from schedule import GlobalScheduleExecutor, SchedulePlan
+from schedule import SchedulePlan
+from schedule.universal import GlobalScheduleExecutor
 from commons import AutonomousMonitor, Loggable
 from config import get_global_scheduler
 
@@ -21,7 +22,7 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
     status, app, err = await self.__app_mgr.get_appliance(self.__app_id)
     if not app:
       if status == 404:
-        self.logger.info('Appliance %s no longer exists'%self.__app_id)
+        self.logger.info("Appliance '%s' no longer exists"%self.__app_id)
       else:
         self.logger.error(err)
       self.stop()
@@ -62,8 +63,14 @@ class ApplianceScheduler(Loggable, metaclass=ABCMeta):
     """
     raise NotImplemented
 
+  async def schedule_containers(self, app, agents):
+    raise NotImplemented
 
-from container.base import ContainerState, ContainerType
+  async def schedule_volumes(self, app, agents):
+    raise NotImplemented
+
+
+from container import ContainerState, ContainerType
 
 
 class DefaultApplianceScheduler(ApplianceScheduler):
@@ -75,8 +82,8 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     if not free_contrs:
       sched.done = True
       return sched
-    sched.add_containers([c for c in free_contrs if c.state in
-                          (ContainerState.SUBMITTED, ContainerState.FAILED)])
+    sched.add_containers([c for c in free_contrs
+                          if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)])
     return sched
 
   def resolve_dependencies(self, app):

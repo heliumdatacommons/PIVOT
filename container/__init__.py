@@ -75,7 +75,7 @@ class NetworkMode(Enum):
 
 
 @swagger.model
-class Volume:
+class ContainerVolume:
   """
   Volume mounted to the container. Only support host local volumes currently
 
@@ -450,7 +450,7 @@ class Container:
         return 200, Job(**data), None
       except ValueError as e:
         return 400, None, str(e)
-    return 422, 'Unknown container type: %s'%data['type'], None
+    return 400, 'Unknown container type: %s'%data['type'], None
 
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
@@ -467,7 +467,7 @@ class Container:
     if self.__cmd and self.__args:
       raise ValueError("Cannot specify both 'cmd' and 'args'")
     self.__env = {k: v if v and isinstance(v, str) else json.dumps(v) for k, v in env.items()}
-    self.__volumes = [Volume(**v) for v in volumes]
+    self.__volumes = [ContainerVolume(**v) for v in volumes]
     self.__network_mode = network_mode if isinstance(network_mode, NetworkMode) \
                       else NetworkMode(network_mode.upper())
     self.__endpoints = [Endpoint(**e) for e in endpoints]

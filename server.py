@@ -4,8 +4,8 @@ from tornado.web import Application, StaticFileHandler
 from tornado.httpserver import HTTPServer
 
 
-from appliance.base import Appliance
-from container.base import Container
+from appliance import Appliance
+from container import Container
 from cluster.handler import ClusterInfoHandler
 from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
@@ -15,7 +15,7 @@ from index.handler import IndexHandler
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
 from config import config, get_global_scheduler
-from schedule import GlobalScheduleExecutor
+from schedule.universal import GlobalScheduleExecutor
 from util import dirname
 
 
@@ -40,7 +40,7 @@ def start_server():
     (r'/appliance/(%s)/job\/*'%Container.ID_PATTERN, JobsHandler),
     (r'/appliance/(%s)/ui\/*'%Appliance.ID_PATTERN, ApplianceUIHandler),
     (r'/appliance/(%s)/container/(%s)\/*'%(Appliance.ID_PATTERN,
-                                              Container.ID_PATTERN), ContainerHandler),
+                                           Container.ID_PATTERN), ContainerHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
     (r'/api', SwaggerAPIHandler),
     (r'/api/ui', SwaggerUIHandler),

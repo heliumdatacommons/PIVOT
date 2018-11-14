@@ -4,7 +4,7 @@ import schedule
 from config import config
 from commons import MongoClient, AutonomousMonitor
 from commons import Manager, APIManager
-from appliance.base import Appliance
+from appliance import Appliance
 from container.manager import ContainerManager
 from schedule.local import ApplianceScheduleExecutor
 
@@ -37,7 +37,7 @@ class ApplianceManager(Manager):
       return status, None, err
     for c in app.containers:
       status, msg, err = await self.__contr_mgr.create_container(c.to_save())
-      if err:
+      if status != 201:
         self.logger.error(err)
         return status, None, err
     err = self._validate_appliance(app)

@@ -1,6 +1,6 @@
 import swagger
 
-from container.base import Container, NetworkMode, parse_container_short_id
+from container import Container, NetworkMode, parse_container_short_id
 
 # Limitations:
 # 1. Inefficient job state monitoring: Chronos does not have an API for per-job state
