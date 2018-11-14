@@ -269,11 +269,6 @@ class Service(Container):
       params = [dict(key='hostname', value=str(self.id)),
                 dict(key='rm', value='true'),
                 dict(key='oom-kill-disable', value='true')]
-      params += [
-                 dict(key='volume-driver', value=config.ceph.volume_driver),
-                 dict(key='volume', value='alpha:/tmp'),
-                 dict(key='volume', value='beta:/mnt')
-                ]
       return params
 
     if self.health_check:
