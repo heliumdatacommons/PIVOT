@@ -71,7 +71,7 @@ class CephAPI(API):
 class GeneralConfig:
 
   def __init__(self, master, port=9090, n_parallel=1,
-               scheduler='schedule.DefaultGlobalScheduler', https=False, *args, **kwargs):
+               scheduler='schedule.universal.DefaultGlobalScheduler', https=False, *args, **kwargs):
     self.__master = master
     self.__port = port
     self.__n_parallel = n_parallel

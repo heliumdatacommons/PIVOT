@@ -93,6 +93,35 @@ class Job(Container):
                 repeats=self.repeats, start_time=self.start_time)
 
   def to_request(self):
+
+    def get_default_env():
+      return [dict(name='PIVOT_URL', value=parse_container_short_id('@pivot', 'sys'))]
+
+    def get_default_parameters():
+      return [dict(key='privileged', value=self.is_privileged),
+              dict(key='rm', value='true'),
+              #dict(key='oom-kill-disable', value='true')
+              ]
+
+    def get_port_mappings():
+      return [dict(key='publish',
+                   value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))
+                   for p in self.ports]
+
+    def get_persistent_volumes():
+      params = []
+      if len(self.persistent_volumes) == 0 \
+          or isinstance(self.appliance, str) \
+          or not self.appliance.data_persistence:
+        return params
+      params += [dict(key='volume-driver',
+                      value=self.appliance.data_persistence.volume_type.driver)]
+      params += [v.to_request() for v in self.persistent_volumes]
+      return params
+
+    params = get_default_parameters() \
+             + get_port_mappings() \
+             + get_persistent_volumes()
     r = dict(name=str(self),
              schedule='R%d/%s/P%s'%(self.repeats, self.start_time, self.interval),
              cpus=self.resources.cpus, mem=self.resources.mem, disk=self.resources.disk,
@@ -101,11 +130,12 @@ class Job(Container):
              retries=self.retries,
              environmentVariables=[dict(name=k,
                                         value=parse_container_short_id(v, self.appliance))
-                                   for k, v in self.env.items()] + self._get_default_env(),
+                                   for k, v in self.env.items()] + get_default_env(),
              container=dict(type='DOCKER',
                             image=self.image,
+                            parameters=params,
                             network=self.network_mode.value,
-                            volumes=[v.to_request() for v in self.volumes],
+                            volumes=[v.to_request() for v in self.host_volumes],
                             forcePullImage=self.force_pull_image))
     if self.args:
       r['arguments'] = [parse_container_short_id(a, self.appliance)
@@ -113,15 +143,6 @@ class Job(Container):
     if self.cmd:
       r['command'] = ' '.join([parse_container_short_id(p, self.appliance)
                                for p in self.cmd.split()])
-    parameters = [
-      dict(key='privileged', value=self.is_privileged),
-      dict(key='rm', value='true'),
-      # dict(key='oom-kill-disable', value='true')
-    ]
-    parameters += [dict(key='publish',
-                        value='%d:%d/%s'%(p.host_port, p.container_port, p.protocol))
-                   for p in self.ports]
-    r['container']['parameters'] = parameters
     if self.host:
       r.setdefault('constraints', []).append(['hostname', 'EQUALS', str(self.host)])
     if self.cloud:
@@ -129,9 +150,6 @@ class Job(Container):
     for k, v in self.schedule.constraints.items():
       r.setdefault('constraints', []).append([str(k), 'EQUALS', str(v)])
     return r
-
-  def _get_default_env(self):
-    return [dict(name='PIVOT_URL', value=parse_container_short_id('@pivot', 'sys'))]
 
   def __str__(self):
     return '%s.%s'%(self.appliance, self.id)

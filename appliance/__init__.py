@@ -1,6 +1,7 @@
 import swagger
 
 from container import Container, get_short_ids
+from volume import DataPersistence
 from schedule import Scheduler
 
 
@@ -16,17 +17,36 @@ class Appliance:
 
   @classmethod
   def parse(cls, data):
+
+    def validate_dependencies(contrs):
+      contrs = {c.id: c for c in contrs}
+      parents = {}
+      for c in contrs.values():
+        nonexist = list(filter(lambda c: c not in contrs, c.dependencies))
+        if nonexist:
+          return 422, None, "Dependencies '%s' do not exist in this appliance" % nonexist
+      parents.setdefault(c.id, set()).update(c.dependencies)
+      for c, p in parents.items():
+        cycles = ['%s<->%s' % (c, pp)
+                  for pp in filter(lambda x: c in parents.get(x, set()), p)]
+        if cycles:
+          return 422, None, "Cycle(s) found: %s" % cycles
+      return 200, 'Dependencies are valid', None
+
+
     if not isinstance(data, dict):
       return 422, None, "Failed to parse appliance request format: %s"%type(data)
     missing = Appliance.REQUIRED - data.keys()
     if missing:
       return 400, None, "Missing required field(s) of appliance: %s"%missing
+    fields = {}
+    # instantiate container objects
     containers, contr_ids = [], set()
-    for c in data['containers']:
+    for c in data.pop('containers', []):
       if c['id'] in contr_ids:
         return 400, None, "Duplicate container id: %s"%c['id']
       status, contr, err = Container.parse(dict(**c, appliance=data['id']))
-      if err:
+      if status != 200:
         return status, None, err
       containers.append(contr)
       contr_ids.add(contr.id)
@@ -41,16 +61,35 @@ class Appliance:
     undefined = list(addresses - contr_ids)
     if undefined:
       return 400, None, "Undefined container(s): %s"%undefined
-    app = Appliance(containers=containers,
-                    **{k: v for k, v in data.items() if k not in ('containers', )})
-    return 200, app, None
+    status, msg, err = validate_dependencies(containers)
+    if status != 200:
+      return status, None, err
+    fields.update(containers=containers)
 
-  def __init__(self, id, containers=[], volumes=[],
+    # instantiate data persistence object
+    if 'data_persistence' in data:
+      status, dp, err = DataPersistence.parse(data.pop('data_persistence', {}), data['id'])
+      if status != 200:
+        return status, None, err
+      fields.update(data_persistence=dp)
+
+    # instantiate scheduler object
+    if 'scheduler' in data:
+      status, scheduler, err = Scheduler.parse(data.pop('scheduler', {}))
+      if status != 200:
+        return status, None, err
+      fields.update(scheduler=scheduler)
+
+    return 200, Appliance(**fields, **data), None
+
+  def __init__(self, id, containers=[], data_persistence=None,
                scheduler=Scheduler(name='schedule.local.DefaultApplianceScheduler'),
                **kwargs):
     self.__id = id
     self.__containers = list(containers)
-    self.__volumes = list(volumes)
+    self.__data_persistence = data_persistence \
+      if not data_persistence or isinstance(data_persistence, DataPersistence) \
+      else DataPersistence(**data_persistence)
     self.__scheduler = scheduler if isinstance(scheduler, Scheduler) else Scheduler(**scheduler)
 
   @property
@@ -83,17 +122,19 @@ class Appliance:
 
   @property
   @swagger.property
-  def volumes(self):
+  def data_persistence(self):
     """
-    Persistent volumes shared among containers in the appliance
+    Data persistence abstraction
 
     ---
-    type: list
-    items: Volume
-    required: true
+    type: DataPersistence
 
     """
-    return self.__volumes
+    return self.__data_persistence
+
+  @property
+  def volumes(self):
+    return self.__data_persistence.volumes if self.__data_persistence else []
 
   @property
   @swagger.property
@@ -114,10 +155,18 @@ class Appliance:
   def to_render(self):
     return dict(id=self.id,
                 scheduler=self.scheduler.to_render(),
-                containers=[c.to_render() for c in self.containers])
+                containers=[c.to_render() for c in self.containers],
+                data_persistence=self.data_persistence and self.data_persistence.to_render())
 
   def to_save(self):
-    return dict(id=self.id, scheduler=self.scheduler.to_save())
+    return dict(id=self.id, scheduler=self.scheduler.to_save(),
+                data_persistence=self.data_persistence and self.data_persistence.to_save())
+
+  def __hash__(self):
+    return hash(self.id)
+
+  def __eq__(self, other):
+    return isinstance(other, Appliance) and self.id == other.id
 
   def __str__(self):
     return self.id

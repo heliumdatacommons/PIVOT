@@ -1,4 +1,4 @@
-from ubuntu:xenial
+FROM ubuntu:xenial
 
 ENV GET_PIP_URL https://bootstrap.pypa.io/get-pip.py
 

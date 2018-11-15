@@ -1,7 +1,7 @@
-import json
 import swagger
 
 from tornado.web import RequestHandler
+from tornado.escape import json_encode
 
 from container.manager import ContainerManager
 from commons import Loggable
@@ -42,8 +42,7 @@ class ServicesHandler(RequestHandler, Loggable):
     status, services, err = await self.__contr_mgr.get_containers(appliance=app_id,
                                                                   type='service')
     self.set_status(status)
-    self.write(json.dumps([s.to_render() for s in services]
-                          if status == 200 else error(err)))
+    self.write(json_encode([s.to_render() for s in services] if status == 200 else error(err)))
 
 
 class JobsHandler(RequestHandler, Loggable):
@@ -77,11 +76,9 @@ class JobsHandler(RequestHandler, Loggable):
           application/json:
             schema: Error
     """
-    status, services, err = await self.__contr_mgr.get_containers(appliance=app_id,
-                                                                  type='job')
+    status, services, err = await self.__contr_mgr.get_containers(appliance=app_id, type='job')
     self.set_status(status)
-    self.write(json.dumps([s.to_render() for s in services]
-                          if status == 200 else error(err)))
+    self.write(json_encode([s.to_render() for s in services] if status == 200 else error(err)))
 
 
 class ContainersHandler(RequestHandler, Loggable):
@@ -125,7 +122,7 @@ class ContainerHandler(RequestHandler, Loggable):
     """
     status, contr, err = await self.__contr_mgr.get_container(app_id, contr_id)
     self.set_status(status)
-    self.write(json.dumps(contr.to_render() if status == 200 else error(err)))
+    self.write(json_encode(contr.to_render() if status == 200 else error(err)))
 
   @swagger.operation
   async def delete(self, app_id, contr_id):
@@ -146,4 +143,4 @@ class ContainerHandler(RequestHandler, Loggable):
     """
     status, msg, err = await self.__contr_mgr.delete_container(app_id, contr_id)
     self.set_status(status)
-    self.write(json.dumps(message(msg) if status == 200 else error(err)))
+    self.write(json_encode(message(msg) if status == 200 else error(err)))

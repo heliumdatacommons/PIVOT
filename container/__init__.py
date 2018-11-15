@@ -2,6 +2,8 @@ import re
 import json
 import swagger
 
+import appliance
+
 from enum import Enum
 
 from util import parse_datetime
@@ -74,69 +76,69 @@ class NetworkMode(Enum):
     return any(val == item.value for item in cls)
 
 
+@swagger.enum
+class ContainerVolumeType(Enum):
+
+  HOST = 'HOST'
+  PERSISTENT = 'PERSISTENT'
+
+
 @swagger.model
 class ContainerVolume:
   """
-  Volume mounted to the container. Only support host local volumes currently
+  Volume mounted to the container.
 
   """
 
-  def __init__(self, container_path, host_path, mode='RW', *args, **kwargs):
-    self.__container_path = container_path
-    self.__host_path = host_path
-    self.__mode = mode
+  def __init__(self, src, dest, type=ContainerVolumeType.PERSISTENT,
+               *args, **kwargs):
+    self.__src = src
+    self.__dest = dest
+    self.__type = type if isinstance(type, ContainerVolumeType) else ContainerVolumeType(type.upper())
 
   @property
   @swagger.property
-  def container_path(self):
+  def src(self):
     """
-    Volume mount point in the container
-    ---
-    type: str
-    required: true
-    example: /mnt/data
-
-    """
-    return self.__container_path
-
-  @property
-  @swagger.property
-  def host_path(self):
-    """
-    Physical path of the volume on the host
+    Source of the volume
     ---
     type: str
     required: true
     example: /home/user/data
 
     """
-    return self.__host_path
+    return self.__src
 
   @property
   @swagger.property
-  def mode(self):
+  def dest(self):
     """
-    Read-write mode
+    Mountpoint of the volume in the container
     ---
     type: str
     required: true
-    example: RW
+    example: /mnt/data
 
     """
-    return self.__mode
+    return self.__dest
+
+  @property
+  @swagger.property
+  def type(self):
+    """
+    Volume type
+    ---
+    type: ContainerVolumeType
+    example: persistent
+
+    """
+    return self.__type
 
   def to_render(self):
-    return dict(container_path=self.container_path,
-                host_path=self.host_path,
-                mode=self.mode)
+    return dict(src=self.src, dest=self.dest, type=self.type.value)
 
   def to_save(self):
     return self.to_render()
-
-  def to_request(self):
-    return dict(containerPath=self.container_path,
-                hostPath=self.host_path,
-                mode=self.mode)
 
 
 @swagger.model
@@ -469,7 +471,7 @@ class Container:
     self.__env = {k: v if v and isinstance(v, str) else json.dumps(v) for k, v in env.items()}
     self.__volumes = [ContainerVolume(**v) for v in volumes]
     self.__network_mode = network_mode if isinstance(network_mode, NetworkMode) \
-                      else NetworkMode(network_mode.upper())
+                          else NetworkMode(network_mode.upper())
     self.__endpoints = [Endpoint(**e) for e in endpoints]
     self.__ports = [Port(**p) for p in ports]
     self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
@@ -761,6 +763,28 @@ class Container:
     """
     return self.__deployment
 
+  @property
+  def host_volumes(self):
+    """
+    Host volumes
+    ---
+    type: list
+    items: ContainerVolume
+
+    """
+    return [v for v in self.volumes if v.type == ContainerVolumeType.HOST]
+
+  @property
+  def persistent_volumes(self):
+    """
+    Persistent volumes
+    ---
+    type: list
+    items: ContainerVolume
+
+    """
+    return [v for v in self.volumes if v.type == ContainerVolumeType.PERSISTENT]
+
   @image.setter
   def image(self, image):
     assert isinstance(image, str)
@@ -772,7 +796,7 @@ class Container:
 
   @appliance.setter
   def appliance(self, app):
-    assert isinstance(app, str)
+    assert isinstance(app, str) or isinstance(app, appliance.Appliance)
     self.__appliance = app
 
   @endpoints.setter
@@ -798,7 +822,9 @@ class Container:
     self.__dependencies.append(dep)
 
   def to_render(self):
-    return dict(id=self.id, appliance=self.appliance, type=self.type.value,
+    return dict(id=self.id,
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
+                type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
                 #cmd=self.cmd, args=self.args, env=self.env,
                 #volumes=[v.to_render() for v in self.volumes],
@@ -814,7 +840,9 @@ class Container:
                 deployment=self.deployment and self.deployment.to_render())
 
   def to_save(self):
-    return dict(id=self.id, appliance=self.appliance, type=self.type.value,
+    return dict(id=self.id,
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
+                type=self.type.value,
                 image=self.image, resources=self.resources.to_save(),
                 cmd=self.cmd, args=self.args, env=self.env,
                 volumes=[v.to_save() for v in self.volumes],
@@ -833,9 +861,14 @@ class Container:
     return hash((self.id, self.appliance))
 
   def __eq__(self, other):
-    return self.__class__ == other.__class__ \
+    return isinstance(other, Container) \
             and self.id == other.id \
-            and self.appliance == other.appliance
+            and ((isinstance(self.appliance, appliance.Appliance)
+                 and isinstance(other.appliance, appliance.Appliance)
+                 and self.appliance == other.appliance)
+              or (isinstance(self.appliance, str)
+                 and isinstance(other.appliance, str)
+                 and self.appliance == other.appliance))
 
 
 ################################

@@ -1,8 +1,16 @@
 import swagger
+import container
+import volume
 
 
 @swagger.model
 class Scheduler:
+
+  @classmethod
+  def parse(cls, data):
+    if not isinstance(data, dict):
+      return 422, None, "Failed to parse scheduler data format: %s"%type(data)
+    return 200, Scheduler(**data), None
 
   def __init__(self, name, config={}):
     self.__name = name
@@ -43,6 +51,8 @@ class Scheduler:
 class SchedulePlan:
 
   def __init__(self, done=False, containers=[], volumes=[]):
+    assert all([isinstance(c, container.Container) for c in containers])
+    assert all([isinstance(v, volume.PersistentVolume) for v in volumes])
     self.__done = done
     self.__containers = list(containers)
     self.__volumes = list(volumes)

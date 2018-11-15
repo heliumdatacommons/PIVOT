@@ -1,6 +1,7 @@
 import appliance.manager
 
 from abc import ABCMeta
+from tornado.gen import multi
 
 from schedule import SchedulePlan
 from schedule.universal import GlobalScheduleExecutor
@@ -37,13 +38,8 @@ class ApplianceScheduleExecutor(AutonomousMonitor):
       self.logger.info('Scheduling is done for appliance %s'%self.__app_id)
       self.stop()
       return
-    # execute the new schedule
-    await self._execute(sched)
-
-  async def _execute(self, sched):
-    for c in sched.containers:
-      await self.__global_sched_exec.submit(c)
-      self.logger.info('Container %s is being scheduled'%c.id)
+    # execute the new schedulex
+    await self.__global_sched_exec.submit(sched)
 
 
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
@@ -63,27 +59,35 @@ class ApplianceScheduler(Loggable, metaclass=ABCMeta):
     """
     raise NotImplemented
 
-  async def schedule_containers(self, app, agents):
-    raise NotImplemented
 
-  async def schedule_volumes(self, app, agents):
-    raise NotImplemented
-
-
-from container import ContainerState, ContainerType
+from container import ContainerState, ContainerType, ContainerVolumeType
 
 
 class DefaultApplianceScheduler(ApplianceScheduler):
 
+  def __init__(self, *args, **kwargs):
+    super(DefaultApplianceScheduler, self).__init__(*args, **kwargs)
+
   async def schedule(self, app, agents):
+    """
+
+    :param app: appliance.Appliance
+    :param agents: cluster.Agent
+    :return: schedule.SchedulePlan
+
+    """
     sched = SchedulePlan()
     free_contrs = self.resolve_dependencies(app)
-    self.logger.debug('Free containers: %s'%[c.id for c in free_contrs])
+    self.logger.info('Free containers: %s'%[c.id for c in free_contrs])
     if not free_contrs:
       sched.done = True
       return sched
+    volumes = {v.id: v for v in app.volumes}
     sched.add_containers([c for c in free_contrs
                           if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)])
+    sched.add_volumes([volumes[v.src] for c in free_contrs
+                       for v in c.persistent_volumes
+                       if v.src in volumes and not volumes[v.src].is_instantiated])
     return sched
 
   def resolve_dependencies(self, app):
@@ -94,3 +98,4 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     for c in contrs.values():
       parents.setdefault(c.id, set()).update([d for d in c.dependencies if d in contrs])
     return [contrs[k] for k, v in parents.items() if not v]
+

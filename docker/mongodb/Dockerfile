@@ -1,4 +1,4 @@
-from ubuntu:xenial
+FROM ubuntu:xenial
 
 # install mongodb
 RUN mkdir -p /data/db \

@@ -1,11 +1,15 @@
 import importlib
+
 import schedule
+
+from tornado.gen import multi
 
 from config import config
 from commons import MongoClient, AutonomousMonitor
 from commons import Manager, APIManager
 from appliance import Appliance
 from container.manager import ContainerManager
+from volume.manager import VolumeManager
 from schedule.local import ApplianceScheduleExecutor
 
 
@@ -15,6 +19,7 @@ class ApplianceManager(Manager):
     self.__app_api = ApplianceAPIManager()
     self.__contr_mgr = ContainerManager()
     self.__app_db = ApplianceDBManager()
+    self.__vol_mgr = VolumeManager()
 
   async def get_appliance(self, app_id):
     status, app, err = await self.__app_db.get_appliance(app_id)
@@ -22,29 +27,32 @@ class ApplianceManager(Manager):
       return status, app, err
     app = Appliance(**app)
     status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
+    if app.data_persistence:
+      status, app.data_persistence.volumes, err = await self.__vol_mgr.get_volumes(appliance=app_id)
     return 200, app, None
-
-  async def get_appliances(self, **filters):
-    return self.__app_db.get_appliances(**filters)
 
   async def create_appliance(self, data):
     status, _, _ = await self.get_appliance(data['id'])
     if status == 200:
       return 409, None, "Appliance '%s' already exists"%data['id']
     status, app, err = Appliance.parse(data)
-    if err:
+    if status != 200:
       self.logger.error(err)
       return status, None, err
-    for c in app.containers:
-      status, msg, err = await self.__contr_mgr.create_container(c.to_save())
+    resps = await multi([self.__contr_mgr.create_container(c.to_save()) for c in app.containers])
+    for status, _, err in resps:
       if status != 201:
         self.logger.error(err)
         return status, None, err
-    err = self._validate_appliance(app)
-    if err:
-      return err
-    status, msg, err = await self.save_appliance(app, True)
-    if err:
+    dp = app.data_persistence
+    if dp:
+      resps = await multi([self.__vol_mgr.create_volume(v.to_save()) for v in dp.volumes])
+      for status, _, err in resps:
+        if status != 201:
+          self.logger.error(err)
+          return status, None, err
+    status, _, err = await self.save_appliance(app)
+    if status != 200:
       self.logger.error(err)
       return status, None, err
     scheduler = self._get_scheduler(app.scheduler)
@@ -72,24 +80,6 @@ class ApplianceManager(Manager):
 
   async def save_appliance(self, app, upsert=True):
     return await self.__app_db.save_appliance(app, upsert)
-
-  def _validate_appliance(self, app):
-
-    def validate_dependencies(contrs):
-      contrs = {c.id: c for c in contrs}
-      parents = {}
-      for c in contrs.values():
-        nonexist = list(filter(lambda c: c not in contrs, c.dependencies))
-        if nonexist:
-          return 422, None, "Dependencies '%s' do not exist in this appliance"%nonexist
-      parents.setdefault(c.id, set()).update(c.dependencies)
-      for c, p in parents.items():
-        cycles = ['%s<->%s'%(c, pp)
-                  for pp in filter(lambda x: c in parents.get(x, set()), p)]
-        if cycles:
-          return 422, None, "Cycle(s) found: %s"%cycles
-
-    return validate_dependencies(app.containers)
 
   def _get_scheduler(self, sched):
     try:

@@ -9,7 +9,7 @@ from tornado.ioloop import PeriodicCallback
 from tornado.gen import sleep
 from motor.motor_tornado import MotorClient
 
-from util import error, dirname
+from util import dirname
 from config import config
 
 
@@ -78,11 +78,11 @@ class AsyncHttpClientWrapper(Loggable):
         body = json.loads(body)
       return 200, body, None
     except json.JSONDecodeError as de:
-      return 422, None, error(de.msg)
+      return 422, None, de.msg
     except HTTPError as e:
       if e.code == 599:
         return e.code, None, e.message
-      return e.code, None, error(e.response.body.decode('utf-8'))
+      return e.code, None, e.response.body.decode('utf-8')
     except (ConnectionRefusedError, ConnectionResetError):
       self.logger.warning('Connection refused/reset, retry after 3 seconds')
       sleep(3)

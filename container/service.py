@@ -1,7 +1,6 @@
 import swagger
 
-from container import Container, NetworkMode, parse_container_short_id
-from config import config
+from container import Container, NetworkMode, ContainerVolumeType, parse_container_short_id
 
 
 @swagger.model
@@ -259,17 +258,31 @@ class Service(Container):
 
   def to_request(self):
 
+    def get_default_env():
+      return dict(PIVOT_URL=parse_container_short_id('@pivot', 'sys'))
+
+    def get_default_parameters():
+      return [dict(key='hostname', value=str(self.id)),
+              dict(key='rm', value='true'),
+              dict(key='oom-kill-disable', value='true')]
+
+    def get_persistent_volumes():
+      params = []
+      if len(self.persistent_volumes) == 0 \
+          or isinstance(self.appliance, str) \
+          or not self.appliance.data_persistence:
+        return params
+      params += [dict(key='volume-driver',
+                      value=self.appliance.data_persistence.volume_type.driver)]
+      params += [dict(key='volume', value='%s-%s:%s'%(self.appliance.id, v.src, v.dest))
+                 for v in self.persistent_volumes]
+      return params
+
     def merge_env():
-      env = self._get_default_env()
+      env = get_default_env()
       env.update({k: parse_container_short_id(v, self.appliance)
                   for k, v in self.env.items()})
       return env
-
-    def parameters():
-      params = [dict(key='hostname', value=str(self.id)),
-                dict(key='rm', value='true'),
-                dict(key='oom-kill-disable', value='true')]
-      return params
 
     if self.health_check:
       health_check = dict(self.health_check.to_request())
@@ -278,6 +291,7 @@ class Service(Container):
                                                                     self.appliance)
 
     self._add_default_health_check()
+    params = get_default_parameters() + get_persistent_volumes()
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
              env=merge_env(),
@@ -285,11 +299,12 @@ class Service(Container):
              requirePorts=len(self.ports) > 0,
              acceptedResourceRoles=["slave_public", "*"],
              container=dict(type='DOCKER',
-                            volumes=[v.to_request() for v in self.volumes],
+                            volumes=[dict(hostPath=v.src, containerPath=v.dest, mode='RW')
+                                     for v in self.host_volumes],
                             docker=dict(image=self.image,
                                         privileged=self.is_privileged,
                                         forcePullImage=self.force_pull_image,
-                                        parameters=parameters())),
+                                        parameters=params)),
              healthChecks=[health_check] if self.health_check else [],
              upgradeStrategy=dict(
                minimumHealthCapacity=self.minimum_capacity,
@@ -331,9 +346,6 @@ class Service(Container):
           continue
         self.health_check = HealthCheck(port_index=i)
         break
-
-  def _get_default_env(self):
-    return dict(PIVOT_URL=parse_container_short_id('@pivot', 'sys'))
 
   def __str__(self):
     return '/%s/%s'%(self.appliance, self.id)

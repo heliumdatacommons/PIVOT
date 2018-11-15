@@ -1,6 +1,8 @@
 import json
 import datetime
 
+import appliance.manager
+
 from datetime import timedelta
 
 from config import config
@@ -18,7 +20,7 @@ class ContainerManager(Manager):
     self.__contr_db = ContainerDBManager()
     self.__cluster_db = AgentDBManager()
 
-  async def get_container(self, app_id, contr_id, ttl=0):
+  async def get_container(self, app_id, contr_id, ttl=0, full_blown=False):
     status, contr, err = await self.__contr_db.get_container(app_id, contr_id)
     if status == 404:
       return status, contr, err
@@ -35,9 +37,12 @@ class ContainerManager(Manager):
       elif status != 404:
         self.logger.error("Failed to update container '%s'"%contr)
         self.logger.error(err)
+    if full_blown:
+      app_mgr = appliance.manager.ApplianceManager()
+      status, contr.appliance, err = await app_mgr.get_appliance(app_id)
     return 200, contr, None
 
-  async def get_containers(self, ttl=0, **filters):
+  async def get_containers(self, ttl=0, full_blown=False, **filters):
     contrs = await self.__contr_db.get_containers(**filters)
     contrs_to_del, contrs_to_update = [], [],
     cur_time = datetime.datetime.now(tz=None)
@@ -60,6 +65,10 @@ class ContainerManager(Manager):
     for c in contrs_to_update:
       c.last_update = datetime.datetime.now(tz=None)
       await self.save_container(c, upsert=False)
+    if full_blown:
+      app_mgr = appliance.manager.ApplianceManager()
+      for c in contrs:
+        _, c.appliance, _ = await app_mgr.get_appliance(c.appliance)
     return 200, contrs, None
 
   async def create_container(self, data):
@@ -111,6 +120,11 @@ class ContainerManager(Manager):
     return 200, "Containers matching %s have been deleted"%filters, None
 
   async def provision_container(self, contr):
+    """
+
+    :param contr: container.Container
+
+    """
     assert isinstance(contr, Container)
     if contr.type == ContainerType.SERVICE:
       ### WARNING: if the service already exists, it will be overriden by the new
