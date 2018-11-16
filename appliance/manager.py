@@ -45,12 +45,8 @@ class ApplianceManager(Manager):
     if status != 200:
       self.logger.error(err)
       return status, None, err
-    resps = await multi([self.__contr_mgr.create_container(c.to_save()) for c in app.containers])
-    for status, _, err in resps:
-      if status != 201:
-        self.logger.error(err)
-        await self._clean_up_incomplete_appliance(app.id)
-        return status, None, err
+
+    # create persistent volumes if any
     dp = app.data_persistence
     if dp:
       resps = await multi([self.__vol_mgr.get_volume(app.id, v.id) for v in dp.volumes])
@@ -68,6 +64,15 @@ class ApplianceManager(Manager):
             self.logger.error(err)
             await self._clean_up_incomplete_appliance(app.id)
             return status, None, err
+
+    # create containers
+    resps = await multi([self.__contr_mgr.create_container(c.to_save()) for c in app.containers])
+    for status, _, err in resps:
+      if status != 201:
+        self.logger.error(err)
+        await self._clean_up_incomplete_appliance(app.id)
+        return status, None, err
+
     status, _, err = await self.save_appliance(app)
     if status != 200:
       self.logger.error(err)

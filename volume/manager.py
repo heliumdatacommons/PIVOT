@@ -1,7 +1,5 @@
 import appliance.manager
 
-from tornado.escape import json_decode
-
 from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
@@ -13,6 +11,7 @@ class VolumeManager(Manager):
   def __init__(self):
     self.__vol_api = VolumeAPIManager()
     self.__vol_db = VolumeDBManager()
+
 
   async def create_volume(self, data):
     """
@@ -44,15 +43,19 @@ class VolumeManager(Manager):
     await self.__vol_db.save_volume(vol)
     return status, vol, None
 
-  async def erase_volume(self, app_id, vol_id):
-    status, vol, err = await self.__vol_db.get_volume(app_id, vol_id)
+  async def delete_volume(self, app_id, vol_id):
+    status, vol, err = await self.get_volume(app_id, vol_id, full_blown=True)
     if status == 404:
       return status, vol, err
-    status, msg, err = await self.__vol_api.erase_volume(app_id, vol_id)
+    in_use = set([c.id for c in vol.appliance.containers
+                  for v in c.persistent_volumes if v.src == vol_id])
+    if len(in_use) > 0:
+      return 400, None, 'Persistent volume %s is in use by container(s): %s'%(vol_id, list(in_use))
+    status, msg, err = await self.__vol_api.delete_volume(app_id, vol_id)
     if status != 200:
       return status, None, err
     await self.__vol_db.delete_volume(vol)
-    return status, "Volume '%s' has been deleted"%vol, None
+    return status, "Persistent volume '%s' has been deleted"%vol, None
 
   async def get_volume(self, app_id, vol_id, full_blown=False):
     status, vol, err = await self.__vol_db.get_volume(app_id, vol_id)
@@ -60,7 +63,7 @@ class VolumeManager(Manager):
       return status, vol, err
     if full_blown:
       app_mgr = appliance.manager.ApplianceManager()
-      _, vol.appliance, _ = app_mgr.get_appliance(app_id)
+      _, vol.appliance, _ = await app_mgr.get_appliance(app_id)
     return status, vol, None
 
   async def get_volumes(self, full_blown=False, **filters):
@@ -85,7 +88,7 @@ class VolumeAPIManager(APIManager):
     api = config.ceph
     return await self.http_cli.post(api.host, api.port, '/fs', dict(vol.to_request()))
 
-  async def erase_volume(self, app_id, vol_id):
+  async def delete_volume(self, app_id, vol_id):
     api = config.ceph
     return await self.http_cli.delete(api.host, api.port, '/fs/%s-%s'%(app_id, vol_id))
 

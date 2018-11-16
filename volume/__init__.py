@@ -94,7 +94,9 @@ class PersistentVolume:
   Distributed persistent volume shared among containers in an appliance
 
   """
+
   REQUIRED = frozenset(['id'])
+  ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
   def parse(cls, data):
