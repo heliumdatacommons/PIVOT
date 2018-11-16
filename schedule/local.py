@@ -82,12 +82,12 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     if not free_contrs:
       sched.done = True
       return sched
-    volumes = {v.id: v for v in app.volumes}
+    vols_declared = {v.id: v for v in app.volumes}
+    vols_to_create = set([v.src for c in free_contrs for v in c.persistent_volumes
+                          if v.src in vols_declared and not vols_declared[v.src].is_instantiated])
     sched.add_containers([c for c in free_contrs
                           if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)])
-    sched.add_volumes([volumes[v.src] for c in free_contrs
-                       for v in c.persistent_volumes
-                       if v.src in volumes and not volumes[v.src].is_instantiated])
+    sched.add_volumes([vols_declared[vid] for vid in vols_to_create])
     return sched
 
   def resolve_dependencies(self, app):

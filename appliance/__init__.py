@@ -33,7 +33,6 @@ class Appliance:
           return 422, None, "Cycle(s) found: %s" % cycles
       return 200, 'Dependencies are valid', None
 
-
     if not isinstance(data, dict):
       return 422, None, "Failed to parse appliance request format: %s"%type(data)
     missing = Appliance.REQUIRED - data.keys()
