@@ -29,6 +29,10 @@ class ApplianceManager(Manager):
     status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
     if app.data_persistence:
       status, app.data_persistence.volumes, err = await self.__vol_mgr.get_volumes(appliance=app_id)
+    if len(app.containers) == 0 \
+        and (not app.data_persistence or len(app.data_persistence.volumes) == 0):
+      self.__app_db.delete_appliance(app_id)
+      return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
   async def create_appliance(self, data):
@@ -38,8 +42,8 @@ class ApplianceManager(Manager):
       vols_to_mount = set([pv.src for c in app.containers for pv in c.persistent_volumes])
       return list(vols_to_mount - all_vols)
 
-    status, _, _ = await self.get_appliance(data['id'])
-    if status == 200:
+    status, app, _ = await self.get_appliance(data['id'])
+    if status == 200 and len(app.containers) > 0:
       return 409, None, "Appliance '%s' already exists"%data['id']
     status, app, err = Appliance.parse(data)
     if status != 200:
@@ -83,21 +87,39 @@ class ApplianceManager(Manager):
     ApplianceScheduleExecutor(app.id, scheduler).start()
     return 201, app, None
 
-  async def delete_appliance(self, app_id):
-    status, app, err = await self.__app_db.get_appliance(app_id)
-    if err:
+  async def delete_appliance(self, app_id, erase_data=False):
+    self.logger.info('Erase data?: %s'%erase_data)
+    status, app, err = await self.get_appliance(app_id)
+    if status != 200:
       self.logger.error(err)
       return status, None, err
     self.logger.info("Stop monitoring appliance '%s'"%app_id)
+
+    # deprovision containers
     status, msg, err = await self.__contr_mgr.delete_containers(appliance=app_id)
     if status != 200:
       self.logger.error(err)
-      return 400, None, "Failed to deprovision jobs of appliance '%s'"%app_id
+      return 207, None, "Failed to deprovision jobs of appliance '%s'"%app_id
     self.logger.info(msg)
+
+    # deprovision/delete persistent volumes if any
+    if app.data_persistence:
+      _, vols, _ = await self.__vol_mgr.get_volumes(appliance=app_id)
+      resps = await multi([(self.__vol_mgr.delete_volume(app_id, v.id)
+                            if erase_data else self.__vol_mgr.deprovision_volume(v))
+                           for v in vols])
+      for i, (status, _, err) in enumerate(resps):
+        if status != 200:
+          self.logger.error(err)
+          return 207, None, "Failed to deprovision persistent volume '%s'"%vols[i].id
+
+    # deprovision appliance
     status, msg, err = await self.__app_api.deprovision_appliance(app_id)
-    if err and status != 404:
+    if status != 200 and status != 404:
       self.logger.error(err)
-      return 400, None, "Failed to deprovision appliance '%s'"%app_id
+      return 207, None, "Failed to deprovision appliance '%s'"%app_id
+    if erase_data:
+      await self.__app_db.delete_appliance(app_id)
     ApplianceDeletionChecker(app_id).start()
     return status, msg, None
 
@@ -180,9 +202,6 @@ class ApplianceDeletionChecker(AutonomousMonitor):
       self.logger.info("Found obsolete container(s) of appliance '%s', deleting"%self.__app_id)
       await self.__contr_mgr.delete_containers(appliance=self.__app_id)
       return
-    if status == 404:
-      self.logger.info("Delete appliance '%s' from database"%self.__app_id)
-      await self.__app_db.delete_appliance(self.__app_id)
-    elif status != 200:
+    if status != 200:
       self.logger.error(err)
     self.stop()

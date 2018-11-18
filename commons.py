@@ -71,7 +71,7 @@ class AsyncHttpClientWrapper(Loggable):
       if isinstance(body, dict):
         body = json.dumps(body)
       r = await self.__cli.fetch('%s://%s:%d%s'%(protocol, host, port, endpoint),
-                                 method=method, body=body,
+                                 method=method, body=body, request_timeout=60,
                                  headers=dict(**self.__headers, **headers))
       body = r.body.decode('utf-8')
       if body:

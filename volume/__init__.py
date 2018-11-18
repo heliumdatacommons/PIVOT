@@ -174,6 +174,9 @@ class PersistentVolume:
   def set_instantiated(self):
     self.__is_instantiated = True
 
+  def unset_instantiated(self):
+    self.__is_instantiated = False
+
   def to_render(self):
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,

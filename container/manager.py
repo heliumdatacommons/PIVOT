@@ -102,6 +102,7 @@ class ContainerManager(Manager):
         self.logger.error(del_job_err)
       if status == 404:
         await self.__contr_db.delete_container(contr)
+    await self.__contr_db.delete_containers(appliance=app_id, id=contr_id)
     return 200, "Container '%s' is being deleted"%contr, None
 
   async def delete_containers(self, **filters):

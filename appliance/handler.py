@@ -103,13 +103,23 @@ class ApplianceHandler(RequestHandler, Loggable):
         content:
           application/json:
             schema: Error
+      400:
+        description: unrecognized parameter value(s)
+        content:
+          application/json
+            schema: Error
       404:
         description: The requested appliance does not exist
         content:
           application/json:
             schema: Error
     """
-    status, msg, err = await self.__app_mgr.delete_appliance(app_id)
+    erase_data = self.get_query_argument('erase_data', False)
+    if not isinstance(erase_data, bool) and erase_data.lower() not in ('true', 'false'):
+      self.set_status(400)
+      self.write(error(400, "Unrecognized 'erase_data' value: %s"%erase_data))
+      return
+    erase_data = erase_data and erase_data.lower() == 'true'
+    status, msg, err = await self.__app_mgr.delete_appliance(app_id, erase_data=erase_data)
     self.set_status(status)
     self.write(json.dumps(message(msg) if status == 200 else error(err)))
-
