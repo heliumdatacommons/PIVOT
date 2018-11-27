@@ -1,23 +1,8 @@
-FROM ubuntu:xenial
+FROM alpine:latest
 
-ENV GET_PIP_URL https://bootstrap.pypa.io/get-pip.py
+COPY requirement.txt /tmp/requirement.txt
 
-# install python3.6
-RUN apt-get update \
-    && apt-get install -y software-properties-common curl \
-    && add-apt-repository ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y python3.6 \
-    && apt-get purge -y python3.5 python\
-    && apt-get autoremove -y \
-    && ln -s /usr/bin/python3.6 /usr/bin/python3 \
-    && curl -O $GET_PIP_URL \
-    && python3 get-pip.py \
-    && rm -f get-pip.py \
-    && apt-get -y autoremove \
-    && apt-get autoclean
-
-COPY requirement.txt requirement.txt
-
-RUN pip install --no-cache-dir -r requirement.txt \
-    && rm -f requirement.txt
+RUN apk add --no-cache --update python3 py3-pip \
+    && pip3 install --upgrade --no-cache-dir pip \
+    && pip3 install --no-cache-dir -r /tmp/requirement.txt \
+    && rm -f /tmp/requirement.txt
