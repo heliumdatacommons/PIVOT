@@ -82,7 +82,7 @@ class LocationAwareApplianceScheduler(DefaultApplianceScheduler):
       if agent:
         self.logger.info("Container '%s' will land on %s (%s, %s)"%(
         c.id, agent.hostname, agent.attributes['region'], agent.attributes['cloud']))
-        c.schedule.add_constraint('hostname', agent.hostname)
+        c.schedule_hints.add_constraint('hostname', agent.hostname)
         agent_resources[agent]['cpus'] -= c.resources.cpus
         agent_resources[agent]['mem'] -= c.resources.mem
         agent_resources[agent]['disk'] -= c.resources.disk

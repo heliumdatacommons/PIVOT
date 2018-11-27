@@ -160,8 +160,8 @@ class Service(Container):
   """
 
   def __init__(self, instances=1, labels={}, health_check=None, default_health_check=False,
-               minimum_capacity=0, **kwargs):
-    super(Service, self).__init__(**kwargs)
+               minimum_capacity=0, *args, **kwargs):
+    super(Service, self).__init__(*args, **kwargs)
     self.__instances = instances
     self.__labels = dict(labels)
     self.__health_check = health_check and HealthCheck(**health_check)
@@ -331,12 +331,16 @@ class Service(Container):
                             containerPort=p.container_port)
                        for i, p in enumerate(self.ports)]
       r['container']['docker']['portMappings'] = port_mappings
-    if self.host:
-      r.setdefault('constraints', []).append(['hostname', 'CLUSTER', str(self.host)])
-    if self.cloud:
-      r.setdefault('constraints', []).append(['cloud', 'CLUSTER', str(self.cloud)])
-    for k, v in self.schedule.constraints.items():
-      r.setdefault('constraints', []).append([str(k), 'CLUSTER', str(v)])
+    preemptible, placement = self.sys_schedule_hints.preemptible, self.sys_schedule_hints.placement
+    r.setdefault('constraints', []).append(['preemptible', 'CLUSTER', str(preemptible).lower()])
+    if placement.host:
+      r.setdefault('constraints', []).append(['hostname', 'CLUSTER', str(placement.host)])
+    elif placement.zone:
+      r.setdefault('constraints', []).append(['zone', 'CLUSTER', str(placement.zone)])
+    elif placement.region:
+      r.setdefault('constraints', []).append(['region', 'CLUSTER', str(placement.region)])
+    elif placement.cloud:
+      r.setdefault('constraints', []).append(['cloud', 'CLUSTER', str(placement.cloud)])
     return r
 
   def _add_default_health_check(self):

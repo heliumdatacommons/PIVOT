@@ -3,10 +3,12 @@ import json
 import swagger
 
 import appliance
+import schedule
 
 from enum import Enum
 
 from util import parse_datetime
+from locality import Placement
 
 
 @swagger.enum
@@ -90,8 +92,7 @@ class ContainerVolume:
 
   """
 
-  def __init__(self, src, dest, type=ContainerVolumeType.PERSISTENT,
-               *args, **kwargs):
+  def __init__(self, src, dest, type=ContainerVolumeType.PERSISTENT, *args, **kwargs):
     self.__src = src
     self.__dest = dest
     self.__type = type if isinstance(type, ContainerVolumeType) else ContainerVolumeType(type.upper())
@@ -395,35 +396,35 @@ class Resources:
 
 
 @swagger.model
-class Data:
-  """
-  Data specifications
+class ContainerScheduleHints(schedule.ScheduleHints):
 
-  """
-  def __init__(self, input=[], *args, **kwargs):
-    self.__input = list(input)
+  @classmethod
+  def parse(self, data, from_user=True):
+    if not isinstance(data, dict):
+      return 422, None, "Failed to parse container data format: %s" % type(data)
+    return 200, ContainerScheduleHints(**data), None
+
+  def __init__(self, preemptible=False, *args, **kwargs):
+    super(ContainerScheduleHints, self).__init__(*args, **kwargs)
+    self.__preemptible = preemptible
 
   @property
   @swagger.property
-  def input(self):
+  def preemptible(self):
     """
-    Paths of input data objects
+    Whether the container is preemptible
     ---
-    type: list
-    items: str
-    default: []
-    example:
-      - /tempZone/rods/a.file
-      - /tempZone/rods/b.file
+    type: bool
+    default: False
 
     """
-    return list(self.__input)
+    return self.__preemptible
 
   def to_render(self):
-    return dict(input=self.input)
+    return dict(**super(ContainerScheduleHints, self).to_render(), preemptible=self.preemptible)
 
   def to_save(self):
-    return self.to_render()
+    return dict(**super(ContainerScheduleHints, self).to_save(), preemptible=self.preemptible)
 
 
 @swagger.model
@@ -437,12 +438,29 @@ class Container:
   ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
-  def parse(cls, data):
+  def parse(cls, data, from_user=True):
     if not isinstance(data, dict):
       return 422, None, "Failed to parse container data format: %s"%type(data)
     missing = Container.REQUIRED - data.keys()
     if missing:
       return 400, None, "Missing required field(s) of container: %s"%missing
+    if from_user:
+      for unwanted_f in ('deployment', ):
+        data.pop(unwanted_f, None)
+    if from_user:
+      sched_hints = data.get('schedule_hints')
+      if sched_hints:
+        status, sched_hints, err = ContainerScheduleHints.parse(sched_hints, from_user)
+        if status != 200:
+          return status, None, err
+        data['user_schedule_hints'] = sched_hints
+    else:
+      user_sched_hints = data.get('user_schedule_hints')
+      sys_sched_hints = data.get('sys_schedule_hints')
+      if user_sched_hints:
+        _, data['user_schedule_hints'], _ = ContainerScheduleHints.parse(user_sched_hints, from_user)
+      if sys_sched_hints:
+        _, data['sys_schedule_hints'], _ = ContainerScheduleHints.parse(sys_sched_hints, from_user)
     if data['type'] == ContainerType.SERVICE.value:
       from container.service import Service
       return 200, Service(**data), None
@@ -457,8 +475,8 @@ class Container:
   def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
-               dependencies=[], data=None, cloud=None, host=None, last_update=None,
-               schedule=None, deployment=None, *aargs, **kwargs):
+               dependencies=[], last_update=None, user_schedule_hints=None, sys_schedule_hints=None,
+               deployment=None, *aargs, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
@@ -475,15 +493,32 @@ class Container:
     self.__endpoints = [Endpoint(**e) for e in endpoints]
     self.__ports = [Port(**p) for p in ports]
     self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
-    self.__cloud = cloud
-    self.__host = host
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = list(dependencies)
-    self.__data = data and Data(**data)
+
+    if isinstance(user_schedule_hints, dict):
+      self.__user_schedule_hints = ContainerScheduleHints(**user_schedule_hints)
+    elif isinstance(user_schedule_hints, ContainerScheduleHints):
+      self.__user_schedule_hints = user_schedule_hints
+    else:
+      self.__user_schedule_hints = ContainerScheduleHints()
+
+    if isinstance(sys_schedule_hints, dict):
+      self.__sys_schedule_hints = ContainerScheduleHints(**sys_schedule_hints)
+    elif isinstance(sys_schedule_hints, ContainerScheduleHints):
+      self.__sys_schedule_hints = sys_schedule_hints
+    else:
+      self.__sys_schedule_hints = ContainerScheduleHints()
+
+    if isinstance(deployment, dict):
+      self.__deployment = Deployment(**deployment)
+    elif isinstance(deployment, Deployment):
+      self.__deployment = deployment
+    else:
+      self.__deployment = Deployment()
+
     self.__last_update = parse_datetime(last_update)
-    self.__schedule = Schedule(**(schedule if schedule else {}))
-    self.__deployment = deployment and Deployment(**deployment)
 
   @property
   @swagger.property
@@ -662,34 +697,6 @@ class Container:
 
   @property
   @swagger.property
-  def cloud(self):
-    """
-    Placement constraint: Cloud platform where the container must be placed
-    ---
-    type: str
-    nullable: true
-    example: 'aws'
-
-    """
-    return self.__cloud
-
-  @property
-  @swagger.property
-  def host(self):
-    """
-    Placement constraint: physical host identified by the public IP address where the
-    container must be placed on
-    ---
-    type: str
-    nullable: true
-    example: '35.23.5.16'
-
-    """
-    return self.__host
-
-
-  @property
-  @swagger.property
   def is_privileged(self):
     """
     Whether to run the container in `privileged` mode
@@ -734,22 +741,25 @@ class Container:
 
   @property
   @swagger.property
-  def data(self):
+  def user_schedule_hints(self):
     """
-    Data consumed by the container
+    User-specified container scheduling hints
     ---
-    type: Data
+    type: ContainerScheduleHints
 
     """
-    return self.__data
+    return self.__user_schedule_hints
 
   @property
-  def last_update(self):
-    return self.__last_update
+  @swagger.property
+  def sys_schedule_hints(self):
+    """
+    System container scheduling hints
+    ---
+    type: ContainerScheduleHints
 
-  @property
-  def schedule(self):
-    return self.__schedule
+    """
+    return self.__sys_schedule_hints
 
   @property
   @swagger.property
@@ -762,6 +772,10 @@ class Container:
 
     """
     return self.__deployment
+
+  @property
+  def last_update(self):
+    return self.__last_update
 
   @property
   def host_volumes(self):
@@ -807,6 +821,11 @@ class Container:
   def state(self, state):
     self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
 
+  @sys_schedule_hints.setter
+  def sys_schedule_hints(self, hints):
+    assert isinstance(hints, ContainerScheduleHints)
+    self.__sys_schedule_hints = hints
+
   @last_update.setter
   def last_update(self, last_update):
     self.__last_update = parse_datetime(last_update)
@@ -826,18 +845,12 @@ class Container:
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value,
                 image=self.image, resources=self.resources.to_render(),
-                #cmd=self.cmd, args=self.args, env=self.env,
-                #volumes=[v.to_render() for v in self.volumes],
-                #network_mode=self.network_mode.value,
                 endpoints=[e.to_render() for e in self.endpoints],
-                #ports=[p.to_render() for p in self.ports],
                 state=self.state.value,
-                #is_privileged=self.is_privileged,
-                #force_pull_image=self.force_pull_image,
                 dependencies=self.dependencies,
-                data=self.data and self.data.to_render(),
-                #cloud=self.cloud, host=self.host,
-                deployment=self.deployment and self.deployment.to_render())
+                user_schedule_hints=self.user_schedule_hints.to_render(),
+                sys_schedule_hints=self.sys_schedule_hints.to_render(),
+                deployment=self.deployment.to_render())
 
   def to_save(self):
     return dict(id=self.id,
@@ -851,11 +864,10 @@ class Container:
                 ports=[p.to_save() for p in self.ports],
                 state=self.state.value, is_privileged=self.is_privileged,
                 force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                data=self.data and self.data.to_save(),
-                cloud=self.cloud, host=self.host,
                 last_update=self.last_update and self.last_update.isoformat(),
-                schedule=self.schedule and self.schedule.to_save(),
-                deployment=self.deployment and self.deployment.to_save())
+                user_schedule_hints=self.user_schedule_hints.to_save(),
+                sys_schedule_hints=self.sys_schedule_hints.to_save(),
+                deployment=self.deployment.to_save())
 
   def __hash__(self):
     return hash((self.id, self.appliance))
@@ -871,80 +883,42 @@ class Container:
                  and self.appliance == other.appliance))
 
 
-################################
-### Internal data structures ###
-################################
-
-class Schedule:
-
-  def __init__(self, constraints={}, *args, **kwargs):
-    self.__constraints = dict(constraints)
-
-  @property
-  def constraints(self):
-    return dict(self.__constraints)
-
-  def add_constraint(self, key, value):
-    self.__constraints[key] = value
-
-  def to_save(self):
-    return dict(constraints=self.constraints)
-
-
 @swagger.model
 class Deployment:
 
-  def __init__(self, ip_addresses=[], cloud=None, host=None):
+  def __init__(self, ip_addresses=[], placement=None):
     self.__ip_addresses = list(ip_addresses)
-    self.__cloud = cloud
-    self.__host = host
+    if isinstance(placement, dict):
+      self.__placement = Placement(**placement)
+    elif isinstance(placement, Placement):
+      self.__placement = placement
+    else:
+      self.__placement = Placement()
 
   @property
   @swagger.property
-  def cloud(self):
+  def placement(self):
     """
-    Cloud platform where the container is deployed
+    Physical placement of the container
     ---
-    type: str
+    type: Placement
     read_only: true
-    example: aws
 
     """
-    return self.__cloud
-
-  @property
-  @swagger.property
-  def host(self):
-    """
-    Physical host where the container is deployed
-    ---
-    type: str
-    read_only: true
-    example: 10.52.0.32
-
-    """
-    return self.__host
+    return self.__placement
 
   @property
   def ip_addresses(self):
     return list(self.__ip_addresses)
 
-  @cloud.setter
-  def cloud(self, cloud):
-    self.__cloud = cloud
-
-  @host.setter
-  def host(self, host):
-    self.__host = host
-
   def add_ip_address(self, ip_addr):
     self.__ip_addresses.append(ip_addr)
 
   def to_render(self):
-    return dict(cloud=self.cloud, host=self.host)
+    return dict(placement=self.placement.to_render())
 
   def to_save(self):
-    return dict(ip_addresses=self.ip_addresses, cloud=self.cloud, host=self.host)
+    return dict(ip_addresses=self.ip_addresses, placement=self.placement.to_render())
 
 
 def get_short_ids(p):

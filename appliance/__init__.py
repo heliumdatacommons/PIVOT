@@ -16,7 +16,7 @@ class Appliance:
   ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
-  def parse(cls, data):
+  def parse(cls, data, from_user=True):
 
     def validate_dependencies(contrs):
       contrs = {c.id: c for c in contrs}
@@ -44,7 +44,10 @@ class Appliance:
     for c in data.pop('containers', []):
       if c['id'] in contr_ids:
         return 400, None, "Duplicate container id: %s"%c['id']
-      status, contr, err = Container.parse(dict(**c, appliance=data['id']))
+      if from_user:
+        for unwanted_f in ('appliance', ):
+          c.pop(unwanted_f, None)
+      status, contr, err = Container.parse(dict(**c, appliance=data['id']), from_user)
       if status != 200:
         return status, None, err
       containers.append(contr)
@@ -67,14 +70,15 @@ class Appliance:
 
     # instantiate data persistence object
     if 'data_persistence' in data:
-      status, dp, err = DataPersistence.parse(data.pop('data_persistence', {}), data['id'])
+      status, dp, err = DataPersistence.parse(dict(**data.pop('data_persistence', {}),
+                                                   appliance=data['id']), from_user)
       if status != 200:
         return status, None, err
       fields.update(data_persistence=dp)
 
     # instantiate scheduler object
     if 'scheduler' in data:
-      status, scheduler, err = Scheduler.parse(data.pop('scheduler', {}))
+      status, scheduler, err = Scheduler.parse(data.pop('scheduler', {}), from_user)
       if status != 200:
         return status, None, err
       fields.update(scheduler=scheduler)
@@ -83,7 +87,7 @@ class Appliance:
 
   def __init__(self, id, containers=[], data_persistence=None,
                scheduler=Scheduler(name='schedule.local.DefaultApplianceScheduler'),
-               **kwargs):
+               *args, **kwargs):
     self.__id = id
     self.__containers = list(containers)
     self.__data_persistence = data_persistence \

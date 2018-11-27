@@ -187,9 +187,10 @@ class ContainerManager(Manager):
         # parse endpoints
         hosts = await self.__cluster_db.find_agents(hostname=t['host'])
         if not hosts: continue
-        host, cloud = hosts[0], hosts[0].attributes.get('cloud')
+        host = hosts[0]
         hostname = host.attributes.get('fqdn') or host.attributes.get('public_ip')
-        if not hostname: continue
+        if not hostname:
+          continue
         if 'portDefinitions' in body:
           for i, p in enumerate(body['portDefinitions']):
             endpoints += [Endpoint(hostname, p['port'], t['ports'][i], p['protocol'])]
@@ -201,7 +202,10 @@ class ContainerManager(Manager):
           if ip['protocol'] != 'IPv4':
             continue
           deployment.add_ip_address(ip['ipAddress'])
-        deployment.host, deployment.cloud = host.hostname, cloud
+        deployment.placement.host = host.hostname
+        deployment.placement.cloud = host.attributes.get('cloud')
+        deployment.placement.region = host.attributes.get('region')
+        deployment.placement.zone = host.attributes.get('zone')
     _, appliance, id = body['id'].split('/')
     return dict(id=id, appliance=appliance, state=state,
                 endpoints=endpoints, deployment=deployment)
@@ -236,11 +240,13 @@ class ContainerManager(Manager):
         self.logger.warning('Unrecognized agent ID: %s'%task.get('slave_id'))
       res.update(state=ContainerState.PENDING)
       return res
-    deployment.host = hosts[0].hostname
-    deployment.cloud = hosts[0].attributes.get('cloud')
-    deployment.add_ip_address(hosts[0].hostname)
+    host = hosts[0]
+    deployment.placement.host = host.hostname
+    deployment.cloud = host.attributes.get('cloud')
+    deployment.region = host.attributes.get('region')
+    deployment.zone = host.attributes.get('zone')
+    deployment.add_ip_address(host.hostname)
     return res
-
 
 
 class ServiceAPIManager(APIManager):
@@ -323,7 +329,7 @@ class ContainerDBManager(Manager):
     return await self._get_container(id=contr_id, appliance=app_id)
 
   async def get_containers(self, **filters):
-    return [Container.parse(c)[1] async for c in self.__contr_col.find(filters)]
+    return [Container.parse(c, False)[1] async for c in self.__contr_col.find(filters)]
 
   async def save_container(self, contr, upsert=True):
     await self.__contr_col.replace_one(dict(id=contr.id, appliance=contr.appliance),
@@ -341,4 +347,4 @@ class ContainerDBManager(Manager):
     contr = await self.__contr_col.find_one(filters)
     if not contr:
       return 404, None, "Container matching '%s' is not found"%filters
-    return Container.parse(contr)
+    return Container.parse(contr, False)

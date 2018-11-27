@@ -1,7 +1,9 @@
 import swagger
 import appliance
+import schedule
 
 from enum import Enum
+
 
 
 @swagger.enum
@@ -25,10 +27,11 @@ class DataPersistence:
   Data persistence abstraction for an appliance
 
   """
+
   REQUIRED = frozenset(['volumes'])
 
   @classmethod
-  def parse(cls, data, appliance):
+  def parse(cls, data, from_user=True):
     if not isinstance(data, dict):
       return 422, None, "Failed to parse data_persistence request format: %s"%type(data)
     missing = DataPersistence.REQUIRED - data.keys()
@@ -37,11 +40,12 @@ class DataPersistence:
     volume_type = data.pop('volume_type', None) or PersistentVolumeType.CEPHFS
     volume_type = volume_type if isinstance(volume_type, PersistentVolumeType) \
       else PersistentVolumeType(volume_type)
-    volumes, vol_ids = [], set()
+    volumes, vol_ids, appliance = [], set(), data.pop('appliance', None)
     for v in data.pop('volumes', []):
       if v['id'] in vol_ids:
         return 400, None, "Duplicate volume id: %s"%v['id']
-      status, contr, err = PersistentVolume.parse(dict(**v, type=volume_type, appliance=appliance))
+      status, contr, err = PersistentVolume.parse(dict(**v, appliance=appliance, type=volume_type),
+                                                  from_user)
       if status != 200:
         return status, None, err
       volumes.append(contr)
@@ -89,6 +93,19 @@ class DataPersistence:
 
 
 @swagger.model
+class VolumeScheduleHints(schedule.ScheduleHints):
+
+  @classmethod
+  def parse(self, data, from_user=True):
+    if not isinstance(data, dict):
+      return 422, None, "Failed to parse container data format: %s" % type(data)
+    return 200, VolumeScheduleHints(**data), None
+
+  def __init__(self, *args, **kwargs):
+    super(VolumeScheduleHints, self).__init__(*args, **kwargs)
+
+
+@swagger.model
 class PersistentVolume:
   """
   Distributed persistent volume shared among containers in an appliance
@@ -99,19 +116,48 @@ class PersistentVolume:
   ID_PATTERN = r'[a-zA-Z0-9-]+'
 
   @classmethod
-  def parse(cls, data):
+  def parse(cls, data, from_user=True):
     if not isinstance(data, dict):
       return 422, None, "Failed to parse volume request format: %s"%type(data)
     missing = PersistentVolume.REQUIRED - data.keys()
     if missing:
       return 400, None, "Missing required field(s) of persistence volume: %s"%missing
+    if from_user:
+      sched_hints = data.pop('schedule_hints', None)
+      if sched_hints:
+        status, sched_hints, err = VolumeScheduleHints.parse(sched_hints, from_user)
+        if status != 200:
+          return status, None, err
+        data['user_schedule_hints'] = sched_hints
+    else:
+      user_sched_hints = data.get('user_schedule_hints')
+      sys_sched_hints = data.get('sys_schedule_hints')
+      if user_sched_hints:
+        _, data['user_schedule_hints'], _ = VolumeScheduleHints.parse(user_sched_hints, from_user)
+      if sys_sched_hints:
+        _, data['sys_schedule_hints'], _ = VolumeScheduleHints.parse(sys_sched_hints, from_user)
     return 200, PersistentVolume(**data), None
 
-  def __init__(self, id, appliance, type, is_instantiated=False, *args, **kwargs):
+  def __init__(self, id, appliance, type, is_instantiated=False,
+               user_schedule_hints=None, sys_schedule_hints=None, *args, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, PersistentVolumeType) else PersistentVolumeType(type)
     self.__is_instantiated = is_instantiated
+
+    if isinstance(user_schedule_hints, dict):
+      self.__user_schedule_hints = VolumeScheduleHints(**user_schedule_hints)
+    elif isinstance(user_schedule_hints, VolumeScheduleHints):
+      self.__user_schedule_hints = user_schedule_hints
+    else:
+      self.__user_schedule_hints = VolumeScheduleHints()
+
+    if isinstance(sys_schedule_hints, dict):
+      self.__sys_schedule_hints = VolumeScheduleHints(**sys_schedule_hints)
+    elif isinstance(sys_schedule_hints, VolumeScheduleHints):
+      self.__sys_schedule_hints = sys_schedule_hints
+    else:
+      self.__sys_schedule_hints = VolumeScheduleHints()
 
   @property
   @swagger.property
@@ -152,6 +198,7 @@ class PersistentVolume:
     return self.__is_instantiated
 
   @property
+  @swagger.property
   def type(self):
     """
     Volume type
@@ -162,6 +209,29 @@ class PersistentVolume:
     """
     return self.__type
 
+  @property
+  @swagger.property
+  def user_schedule_hints(self):
+    """
+    User-specified volume schedule hints
+    ---
+    type: VolumeScheduleHints
+
+    """
+    return self.__user_schedule_hints
+
+  @property
+  @swagger.property
+  def sys_schedule_hints(self):
+    """
+    System volume schedule hints
+    ---
+    type: VolumeScheduleHints
+    read_only: true
+
+    """
+    return self.__sys_schedule_hints
+
   @appliance.setter
   def appliance(self, app):
     assert isinstance(app, str) or isinstance(app, appliance.Appliance)
@@ -170,6 +240,11 @@ class PersistentVolume:
   @type.setter
   def type(self, type):
     self.__type = type
+
+  @sys_schedule_hints.setter
+  def sys_schedule_hints(self, hints):
+    assert isinstance(hints, VolumeScheduleHints)
+    self.__sys_schedule_hints = hints
 
   def set_instantiated(self):
     self.__is_instantiated = True
@@ -180,15 +255,29 @@ class PersistentVolume:
   def to_render(self):
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
-                type=self.type.value, is_instantiated=self.is_instantiated)
+                type=self.type.value, is_instantiated=self.is_instantiated,
+                user_schedule_hints=self.user_schedule_hints.to_render(),
+                sys_schedule_hints=self.sys_schedule_hints.to_render())
 
   def to_save(self):
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
-                type=self.type.value, is_instantiated=self.is_instantiated)
+                type=self.type.value, is_instantiated=self.is_instantiated,
+                user_schedule_hints=self.user_schedule_hints.to_save(),
+                sys_schedule_hints=self.sys_schedule_hints.to_save())
 
   def to_request(self):
-    return dict(name='%s-%s'%(self.appliance, self.id))
+    req = dict(name='%s-%s'%(self.appliance, self.id))
+    sched_hints = self.sys_schedule_hints.placement
+    if sched_hints.host:
+      req['placement'] = dict(type='host', value=sched_hints.host)
+    elif sched_hints.zone:
+      req['placement'] = dict(type='zone', value=sched_hints.zone)
+    elif sched_hints.region:
+      req['placement'] = dict(type='region', value=sched_hints.region)
+    elif sched_hints.cloud:
+      req['placement'] = dict(type='cloud', value=sched_hints.cloud)
+    return req
 
   def __hash__(self):
     return hash((self.id, self.appliance))

@@ -136,11 +136,13 @@
           row.append($('<td>', {text: container.type}));
           row.append($('<td>', {text: container.state, 
                                 style: 'color: ' + getStateColor(container.state) + ';'}));
-          row.append($('<td>', {text: container.deployment == null ? '' : container.deployment.cloud}))
+          row.append($('<td>',
+              {text: container.deployment == null ? '' : container.deployment.placement.cloud}));
           var endpoints = [];
           for (j in container.endpoints) {
             var endpoint = container.endpoints[j];
-            var name = endpoint.name == null ? endpoint.host + ':' + endpoint.host_port: endpoint.name;
+            var name = endpoint.name == null ?
+                endpoint.host + ':' + endpoint.host_port: endpoint.name;
             endpoints.push($('<a>', {
                 href: 'http://' + endpoint.host + ':' + endpoint.host_port,
                 text: name,

@@ -20,8 +20,8 @@ class Job(Container):
   """
 
   def __init__(self, resources, network_mode=NetworkMode.HOST,
-               retries=1, repeats=1, start_time='', interval='2M', **kwargs):
-    super(Job, self).__init__(resources=resources, network_mode=network_mode, **kwargs)
+               retries=1, repeats=1, start_time='', interval='2M', *args, **kwargs):
+    super(Job, self).__init__(resources=resources, network_mode=network_mode, *args, **kwargs)
     if self.resources.gpu > 0:
       raise ValueError('GPU is not yet supported for jobs')
     if self.network_mode == NetworkMode.CONTAINER:
@@ -116,7 +116,8 @@ class Job(Container):
         return params
       params += [dict(key='volume-driver',
                       value=self.appliance.data_persistence.volume_type.driver)]
-      params += [v.to_request() for v in self.persistent_volumes]
+      params += [dict(key='volume', value='%s-%s:%s'%(self.appliance.id, v.src, v.dest))
+                 for v in self.persistent_volumes]
       return params
 
     params = get_default_parameters() \
@@ -143,12 +144,16 @@ class Job(Container):
     if self.cmd:
       r['command'] = ' '.join([parse_container_short_id(p, self.appliance)
                                for p in self.cmd.split()])
-    if self.host:
-      r.setdefault('constraints', []).append(['hostname', 'EQUALS', str(self.host)])
-    if self.cloud:
-      r.setdefault('constraints', []).append(['cloud', 'EQUALS', str(self.cloud)])
-    for k, v in self.schedule.constraints.items():
-      r.setdefault('constraints', []).append([str(k), 'EQUALS', str(v)])
+    preemptible, placement = self.sys_schedule_hints.preemptible, self.sys_schedule_hints.placement
+    r.setdefault('constraints', []).append(['preemptible', 'EQUALS', str(preemptible).lower()])
+    if placement.host:
+      r.setdefault('constraints', []).append(['hostname', 'EQUALS', str(placement.host)])
+    elif placement.zone:
+      r.setdefault('constraints', []).append(['zone', 'EQUALS', str(placement.zone)])
+    elif placement.region:
+      r.setdefault('constraints', []).append(['region', 'EQUALS', str(placement.region)])
+    elif placement.cloud:
+      r.setdefault('constraints', []).append(['cloud', 'EQUALS', str(placement.cloud)])
     return r
 
   def __str__(self):

@@ -1,13 +1,13 @@
 import swagger
-import container
-import volume
+
+from locality import Placement
 
 
 @swagger.model
 class Scheduler:
 
   @classmethod
-  def parse(cls, data):
+  def parse(cls, data, from_user=True):
     if not isinstance(data, dict):
       return 422, None, "Failed to parse scheduler data format: %s"%type(data)
     return 200, Scheduler(**data), None
@@ -51,6 +51,7 @@ class Scheduler:
 class SchedulePlan:
 
   def __init__(self, done=False, containers=[], volumes=[]):
+    import container, volume
     assert all([isinstance(c, container.Container) for c in containers])
     assert all([isinstance(v, volume.PersistentVolume) for v in volumes])
     self.__done = done
@@ -79,4 +80,37 @@ class SchedulePlan:
   def add_volumes(self, vols):
     self.__volumes += list(vols)
 
+
+@swagger.model
+class ScheduleHints:
+
+  def __init__(self, placement=None, *args, **kwargs):
+    if isinstance(placement, dict):
+      self.__placement = Placement(**placement)
+    elif isinstance(placement, Placement):
+      self.__placement = placement
+    else:
+      self.__placement = Placement()
+
+  @property
+  @swagger.property
+  def placement(self):
+    """
+    Placement hints of the container
+    ---
+    type: Placement
+
+    """
+    return self.__placement
+
+  @placement.setter
+  def placement(self, placement):
+    assert isinstance(placement, Placement)
+    self.__placement = placement
+
+  def to_render(self):
+    return dict(placement=self.placement.to_render())
+
+  def to_save(self):
+    return dict(placement=self.placement.to_save())
 

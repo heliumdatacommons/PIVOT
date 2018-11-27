@@ -1,7 +1,6 @@
 import appliance.manager
 
 from abc import ABCMeta
-from tornado.gen import multi
 
 from schedule import SchedulePlan
 from schedule.universal import GlobalScheduleExecutor
@@ -82,11 +81,18 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     if not free_contrs:
       sched.done = True
       return sched
+    contrs_to_create = [c for c in free_contrs
+                        if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)]
+    for c in contrs_to_create:
+      c.sys_schedule_hints = c.user_schedule_hints
     vols_declared = {v.id: v for v in app.volumes}
     vols_to_create = set([v.src for c in free_contrs for v in c.persistent_volumes
-                          if v.src in vols_declared and not vols_declared[v.src].is_instantiated])
-    sched.add_containers([c for c in free_contrs
-                          if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)])
+                          if v.type == ContainerVolumeType.PERSISTENT
+                          and v.src in vols_declared
+                          and not vols_declared[v.src].is_instantiated])
+    for vid in vols_to_create:
+      vols_declared[vid].sys_schedule_hints = vols_declared[vid].user_schedule_hints
+    sched.add_containers(contrs_to_create)
     sched.add_volumes([vols_declared[vid] for vid in vols_to_create])
     return sched
 
@@ -98,4 +104,3 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     for c in contrs.values():
       parents.setdefault(c.id, set()).update([d for d in c.dependencies if d in contrs])
     return [contrs[k] for k, v in parents.items() if not v]
-
