@@ -5,10 +5,8 @@ import dateutil.parser
 def dirname(f):
   return os.path.dirname(os.path.abspath(f))
 
-
 def message(msg):
   return dict(message=msg)
-
 
 def error(msg):
   return dict(error=msg)

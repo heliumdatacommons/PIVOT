@@ -1,5 +1,7 @@
 import datetime
 
+from tornado.gen import multi
+
 from config import config
 from cluster import Master, Agent, AgentResources
 from commons import MongoClient, AutonomousMonitor
@@ -53,8 +55,11 @@ class ClusterMonitor(AutonomousMonitor):
     await self._discover_chronos()
     status, agents, err = await self.__api.get_agents()
     if status == 200:
+      agents_in_db = set(a.id for a in (await self.__agent_db.get_all_agents()))
       for a in agents:
+        agents_in_db.remove(a.id)
         await self.__agent_db.update_agent(a)
+      await multi([self.__agent_db.remove_agent(aid) for aid in agents_in_db])
     else:
       self.logger.info('Failed to query agents')
     self.__last_update = datetime.datetime.now(tz=None)
@@ -201,4 +206,7 @@ class AgentDBManager(Manager):
   async def update_agent(self, agent):
     await self.__agent_col.replace_one(dict(hostname=agent.hostname), agent.to_save(),
                                        upsert=True)
+
+  async def remove_agent(self, agent_id):
+    await self.__agent_col.delete_one(dict(id=agent_id))
 
