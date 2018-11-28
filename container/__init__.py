@@ -512,11 +512,11 @@ class Container:
       self.__sys_schedule_hints = ContainerScheduleHints()
 
     if isinstance(deployment, dict):
-      self.__deployment = Deployment(**deployment)
-    elif isinstance(deployment, Deployment):
+      self.__deployment = ContainerDeployment(**deployment)
+    elif isinstance(deployment, ContainerDeployment):
       self.__deployment = deployment
     else:
-      self.__deployment = Deployment()
+      self.__deployment = ContainerDeployment()
 
     self.__last_update = parse_datetime(last_update)
 
@@ -767,7 +767,7 @@ class Container:
     """
     Container deployment info
     ---
-    type: Deployment
+    type: ContainerDeployment
     read_only: true
 
     """
@@ -884,7 +884,7 @@ class Container:
 
 
 @swagger.model
-class Deployment:
+class ContainerDeployment:
 
   def __init__(self, ip_addresses=[], placement=None):
     self.__ip_addresses = list(ip_addresses)

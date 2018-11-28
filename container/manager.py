@@ -9,7 +9,7 @@ from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
 from cluster.manager import AgentDBManager
-from container import Container, ContainerType, ContainerState, Endpoint, Deployment
+from container import Container, ContainerType, ContainerState, Endpoint, ContainerDeployment
 
 
 class ContainerManager(Manager):
@@ -181,7 +181,7 @@ class ContainerManager(Manager):
         else:
           state = ContainerState.FAILED
     # parse endpoints
-    endpoints, deployment = [], Deployment()
+    endpoints, deployment = [], ContainerDeployment()
     if state == ContainerState.RUNNING:
       for t in tasks:
         # parse endpoints
@@ -217,7 +217,7 @@ class ContainerManager(Manager):
       n_repeats_str = schedule.split('/')[0].strip('R')
       return int(n_repeats_str) if len(n_repeats_str) > 0 else -1
 
-    deployment = Deployment()
+    deployment = ContainerDeployment()
     res = dict(**body, state=ContainerState.PENDING, deployment=deployment)
     if 'task' not in body or not body['task']:
       return res

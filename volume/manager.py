@@ -1,9 +1,12 @@
 import appliance.manager
 
+from tornado.gen import multi
+
 from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
-from volume import PersistentVolume
+from volume import PersistentVolume, VolumeDeployment
+from locality import Placement
 
 
 class VolumeManager(Manager):
@@ -73,9 +76,16 @@ class VolumeManager(Manager):
     return status, "Persistent volume '%s' has been deleted"%vol, None
 
   async def get_volume(self, app_id, vol_id, full_blown=False):
-    status, vol, err = await self.__vol_db.get_volume(app_id, vol_id)
-    if status != 200:
-      return status, vol, err
+    resps = await multi([self.__vol_db.get_volume(app_id, vol_id),
+                         self.__vol_api.get_volume(app_id, vol_id)])
+    for i, (status, output, err) in enumerate(resps):
+      if status != 200:
+        return status, None, err
+      if i == 0:
+        vol = output
+      elif i == 1:
+        self.logger.info(str(output))
+        vol.deployment = VolumeDeployment(placement=Placement(**output['placement']))
     if full_blown:
       app_mgr = appliance.manager.ApplianceManager()
       _, vol.appliance, _ = await app_mgr.get_appliance(app_id)
@@ -83,10 +93,17 @@ class VolumeManager(Manager):
 
   async def get_volumes(self, full_blown=False, **filters):
     vols = await self.__vol_db.get_volumes(**filters)
+    resps = await multi([self.__vol_api.get_volume(v.app, v.id) for v in vols])
+    for i, (status, output, err) in enumerate(resps):
+      if status != 200:
+        self.logger.error(err)
+        continue
+      vols[i].deployment = VolumeDeployment(placement=Placement(**output['placement']))
     if full_blown:
       app_mgr = appliance.manager.ApplianceManager()
-      for v in vols:
-        _, v.appliance, _ = await app_mgr.get_appliance(v.appliance)
+      resps = await multi([app_mgr.get_appliance(v.appliance) for v in vols])
+      for i, (_, app, _) in enumerate(resps):
+        vols[i] = app
     return 200, vols, None
 
 
@@ -94,6 +111,13 @@ class VolumeAPIManager(APIManager):
 
   def __init__(self):
     super(VolumeAPIManager, self).__init__()
+
+  async def get_volume(self, app_id, vol_id):
+    api = config.ceph
+    status, vol, err = await self.http_cli.get(api.host, api.port, '/fs/%s-%s'%(app_id, vol_id))
+    if status != 200:
+      return status, None, err
+    return status, vol, None
 
   async def create_volume(self, vol):
     """

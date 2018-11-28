@@ -8,7 +8,7 @@ class Placement:
 
   """
 
-  def __init__(self, cloud=None, region=None, zone=None, host=None):
+  def __init__(self, cloud=None, region=None, zone=None, host=None, *args, **kwargs):
     self.__cloud = cloud
     self.__region = region
     self.__zone = zone
@@ -66,6 +66,16 @@ class Placement:
     """
     return self.__host
 
+  @property
+  def is_set(self):
+    """
+    Whether the placement is set
+    ---
+    type: bool
+
+    """
+    return any([self.host, self.zone, self.region, self.cloud])
+
   @cloud.setter
   def cloud(self, cloud):
     self.__cloud = cloud
@@ -87,6 +97,3 @@ class Placement:
 
   def to_save(self):
     return self.to_render()
-
-
-

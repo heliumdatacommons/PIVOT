@@ -3,7 +3,7 @@ import appliance
 import schedule
 
 from enum import Enum
-
+from locality import Placement
 
 
 @swagger.enum
@@ -139,7 +139,8 @@ class PersistentVolume:
     return 200, PersistentVolume(**data), None
 
   def __init__(self, id, appliance, type, is_instantiated=False,
-               user_schedule_hints=None, sys_schedule_hints=None, *args, **kwargs):
+               user_schedule_hints=None, sys_schedule_hints=None, deployment=None,
+               *args, **kwargs):
     self.__id = id
     self.__appliance = appliance
     self.__type = type if isinstance(type, PersistentVolumeType) else PersistentVolumeType(type)
@@ -158,6 +159,14 @@ class PersistentVolume:
       self.__sys_schedule_hints = sys_schedule_hints
     else:
       self.__sys_schedule_hints = VolumeScheduleHints()
+
+    if isinstance(deployment, dict):
+      self.__deployment = VolumeDeployment(**deployment)
+    elif isinstance(deployment, VolumeDeployment):
+      self.__deployment = deployment
+    else:
+      self.__deployment = VolumeDeployment()
+
 
   @property
   @swagger.property
@@ -232,6 +241,18 @@ class PersistentVolume:
     """
     return self.__sys_schedule_hints
 
+  @property
+  @swagger.property
+  def deployment(self):
+    """
+    Volume deployment
+    ---
+    type: VolumeDeployment
+    read_only: true
+
+    """
+    return self.__deployment
+
   @appliance.setter
   def appliance(self, app):
     assert isinstance(app, str) or isinstance(app, appliance.Appliance)
@@ -246,6 +267,10 @@ class PersistentVolume:
     assert isinstance(hints, VolumeScheduleHints)
     self.__sys_schedule_hints = hints
 
+  @deployment.setter
+  def deployment(self, deployment):
+    self.__deployment = deployment
+
   def set_instantiated(self):
     self.__is_instantiated = True
 
@@ -257,14 +282,16 @@ class PersistentVolume:
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value, is_instantiated=self.is_instantiated,
                 user_schedule_hints=self.user_schedule_hints.to_render(),
-                sys_schedule_hints=self.sys_schedule_hints.to_render())
+                sys_schedule_hints=self.sys_schedule_hints.to_render(),
+                deployment=self.deployment.to_render())
 
   def to_save(self):
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value, is_instantiated=self.is_instantiated,
                 user_schedule_hints=self.user_schedule_hints.to_save(),
-                sys_schedule_hints=self.sys_schedule_hints.to_save())
+                sys_schedule_hints=self.sys_schedule_hints.to_save(),
+                deployment=self.deployment.to_render())
 
   def to_request(self):
     req = dict(name='%s-%s'%(self.appliance, self.id))
@@ -296,3 +323,24 @@ class PersistentVolume:
     return '%s-%s'%(self.appliance, self.id)
 
 
+@swagger.model
+class VolumeDeployment:
+
+  def __init__(self, placement=None):
+    if isinstance(placement, dict):
+      self.__placement = Placement(**placement)
+    elif isinstance(placement, Placement):
+      self.__placement = placement
+    else:
+      self.__placement = Placement()
+
+  @property
+  @swagger.property
+  def placement(self):
+    return self.__placement
+
+  def to_render(self):
+    return dict(placement=self.placement.to_render())
+
+  def to_save(self):
+    return dict(placement=self.placement.to_render())

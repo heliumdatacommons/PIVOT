@@ -74,7 +74,7 @@ class VolumeHandler(RequestHandler, Loggable):
         description: the requested volume is found and returned
         content:
           application/json:
-            schema: Volume
+            schema: PersistentVolume
       404:
         description: the requested volume is not found
         content:
@@ -96,7 +96,7 @@ class VolumeHandler(RequestHandler, Loggable):
         description: the requested volume is found and returned
         content:
           application/json:
-            schema: Volume
+            schema: PersistentVolume
       400:
         description: >
           the requested volume is in use by container(s) in the appliance and cannot be deleted yet
