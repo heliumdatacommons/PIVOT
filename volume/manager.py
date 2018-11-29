@@ -5,7 +5,7 @@ from tornado.gen import multi
 from config import config
 from commons import MongoClient
 from commons import APIManager, Manager
-from volume import PersistentVolume, VolumeDeployment
+from volume import PersistentVolume, VolumeDeployment, VolumeScope
 from locality import Placement
 
 
@@ -24,7 +24,8 @@ class VolumeManager(Manager):
     status, vol, err = PersistentVolume.parse(data)
     if status != 200:
       return status, vol, err
-    status, _, _ = await self.__vol_db.get_volume(vol.appliance, vol.id)
+    app_id = vol.appliance if vol.scope == VolumeScope.LOCAL else None,
+    status, _, _ = await self.__vol_db.get_volume(app_id, vol.id)
     if status == 200:
       return 409, None, "Volume '%s' already exists"%vol.id
     await self.__vol_db.save_volume(vol)
@@ -61,7 +62,7 @@ class VolumeManager(Manager):
     await self.__vol_db.save_volume(vol)
     return status, "Persistent volume '%s' has been deprovisioned"%vol.id, None
 
-  async def delete_volume(self, app_id, vol_id):
+  async def erase_volume(self, app_id, vol_id):
     status, vol, err = await self.get_volume(app_id, vol_id, full_blown=True)
     if status == 404:
       return status, vol, err
@@ -93,7 +94,9 @@ class VolumeManager(Manager):
 
   async def get_volumes(self, full_blown=False, **filters):
     vols = await self.__vol_db.get_volumes(**filters)
-    resps = await multi([self.__vol_api.get_volume(v.app, v.id) for v in vols])
+    resps = await multi([self.__vol_api.get_volume(v.appliance
+                                                   if v.scope == VolumeScope.LOCAL else None, v.id)
+                         for v in vols])
     for i, (status, output, err) in enumerate(resps):
       if status != 200:
         self.logger.error(err)
@@ -114,7 +117,8 @@ class VolumeAPIManager(APIManager):
 
   async def get_volume(self, app_id, vol_id):
     api = config.ceph
-    status, vol, err = await self.http_cli.get(api.host, api.port, '/fs/%s-%s'%(app_id, vol_id))
+    endpoint = '/fs/%s-%s'%(app_id, vol_id) if app_id else '/fs/%s'%vol_id
+    status, vol, err = await self.http_cli.get(api.host, api.port, endpoint)
     if status != 200:
       return status, None, err
     return status, vol, None
@@ -142,6 +146,8 @@ class VolumeDBManager(Manager):
     return [PersistentVolume.parse(v)[1] async for v in self.__vol_col.find(filters)]
 
   async def get_volume(self, app_id, vol_id):
+    if not app_id:
+      return await self._get_volume(id=vol_id)
     return await self._get_volume(id=vol_id, appliance=app_id)
 
   async def save_volume(self, vol, upsert=True):

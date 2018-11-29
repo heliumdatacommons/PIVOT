@@ -1,5 +1,6 @@
 import importlib
 
+import volume
 import schedule
 
 from tornado.gen import multi
@@ -37,10 +38,19 @@ class ApplianceManager(Manager):
 
   async def create_appliance(self, data):
 
+    vol_mgr = self.__vol_mgr
+
     def validate_volume_mounts(app, vols_existed, vols_declared):
       all_vols = set(vols_existed) | set(vols_declared)
       vols_to_mount = set([pv.src for c in app.containers for pv in c.persistent_volumes])
       return list(vols_to_mount - all_vols)
+
+    def set_container_volume_scope(contrs, vols):
+      vols = {v.id: v for v in vols}
+      for c in contrs:
+        for pv in c.persistent_volumes:
+          if pv.src in vols:
+            pv.scope = vols[pv.src].scope
 
     status, app, _ = await self.get_appliance(data['id'])
     if status == 200 and len(app.containers) > 0:
@@ -53,7 +63,9 @@ class ApplianceManager(Manager):
     # create persistent volumes if any
     dp = app.data_persistence
     if dp:
-      resps = await multi([self.__vol_mgr.get_volume(app.id, v.id) for v in dp.volumes])
+      resps = await multi([vol_mgr.get_volume(app.id if v.scope == volume.VolumeScope.LOCAL
+                                              else None, v.id)
+                           for v in dp.volumes])
       vols_existed = set([v.id for status, v, _ in resps if status == 200])
       vols_declared = set([v.id for v in dp.volumes])
       invalid_vols = validate_volume_mounts(app, vols_existed, vols_declared)
@@ -61,13 +73,15 @@ class ApplianceManager(Manager):
         await self._clean_up_incomplete_appliance(app.id)
         return 400, None, 'Invalid persistent volume(s): %s'%invalid_vols
       if len(vols_existed) < len(dp.volumes):
-        resps = await multi([self.__vol_mgr.create_volume(v.to_save()) for v in dp.volumes
+        resps = await multi([vol_mgr.create_volume(v.to_save())
+                             for v in dp.volumes
                              if v.id not in vols_existed])
-        for status, _, err in resps:
+        for status, v, err in resps:
           if status != 201:
             self.logger.error(err)
             await self._clean_up_incomplete_appliance(app.id)
             return status, None, err
+      set_container_volume_scope(app.containers, dp.volumes)
 
     # create containers
     resps = await multi([self.__contr_mgr.create_container(c.to_save()) for c in app.containers])
@@ -88,6 +102,7 @@ class ApplianceManager(Manager):
     return 201, app, None
 
   async def delete_appliance(self, app_id, erase_data=False):
+    vol_mgr = self.__vol_mgr
     self.logger.info('Erase data?: %s'%erase_data)
     status, app, err = await self.get_appliance(app_id)
     if status != 200:
@@ -102,12 +117,13 @@ class ApplianceManager(Manager):
       return 207, None, "Failed to deprovision jobs of appliance '%s'"%app_id
     self.logger.info(msg)
 
-    # deprovision/delete persistent volumes if any
+    # deprovision/delete local persistent volumes if any
     if app.data_persistence:
-      _, vols, _ = await self.__vol_mgr.get_volumes(appliance=app_id)
-      resps = await multi([(self.__vol_mgr.delete_volume(app_id, v.id)
-                            if erase_data else self.__vol_mgr.deprovision_volume(v))
-                           for v in vols])
+      _, vols, _ = await vol_mgr.get_volumes(appliance=app_id)
+      resps = await multi([(vol_mgr.erase_volume(app_id, v.id)
+                            if erase_data else vol_mgr.deprovision_volume(v))
+                           for v in vols
+                           if v.scope == volume.VolumeScope.LOCAL])
       for i, (status, _, err) in enumerate(resps):
         if status != 200:
           self.logger.error(err)

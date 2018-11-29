@@ -3,6 +3,7 @@ import json
 import swagger
 
 import appliance
+import volume
 import schedule
 
 from enum import Enum
@@ -92,10 +93,12 @@ class ContainerVolume:
 
   """
 
-  def __init__(self, src, dest, type=ContainerVolumeType.PERSISTENT, *args, **kwargs):
+  def __init__(self, src, dest, type=ContainerVolumeType.PERSISTENT, scope=volume.VolumeScope.LOCAL,
+               *args, **kwargs):
     self.__src = src
     self.__dest = dest
     self.__type = type if isinstance(type, ContainerVolumeType) else ContainerVolumeType(type.upper())
+    self.__scope = scope if isinstance(scope, volume.VolumeScope) else volume.VolumeScope(scope.upper())
 
   @property
   @swagger.property
@@ -135,11 +138,20 @@ class ContainerVolume:
     """
     return self.__type
 
+  @property
+  def scope(self):
+    return self.__scope
+
+  @scope.setter
+  def scope(self, scope):
+    assert isinstance(scope, volume.VolumeScope)
+    self.__scope = scope
+
   def to_render(self):
     return dict(src=self.src, dest=self.dest, type=self.type.value)
 
   def to_save(self):
-    return self.to_render()
+    return dict(**self.to_render(), scope=self.__scope.value)
 
 
 @swagger.model

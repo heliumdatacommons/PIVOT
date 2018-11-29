@@ -1,6 +1,7 @@
 import swagger
 
 from container import Container, NetworkMode, ContainerVolumeType, parse_container_short_id
+from volume import VolumeScope
 
 
 @swagger.model
@@ -159,11 +160,10 @@ class Service(Container):
 
   """
 
-  def __init__(self, instances=1, labels={}, health_check=None, default_health_check=False,
+  def __init__(self, instances=1, health_check=None, default_health_check=False,
                minimum_capacity=0, *args, **kwargs):
     super(Service, self).__init__(*args, **kwargs)
     self.__instances = instances
-    self.__labels = dict(labels)
     self.__health_check = health_check and HealthCheck(**health_check)
     self.__default_health_check = default_health_check
     self.__minimum_capacity = minimum_capacity
@@ -180,19 +180,6 @@ class Service(Container):
 
     """
     return self.__instances
-
-  @property
-  @swagger.property
-  def labels(self):
-    """
-    Key-value label(s) assigned to the service for facilitating service discovery
-    ---
-    type: dict
-    default: {}
-    example:
-      region: us-east1
-    """
-    return dict(self.__labels)
 
   @property
   @swagger.property
@@ -242,7 +229,6 @@ class Service(Container):
   def to_render(self):
     return dict(**super(Service, self).to_render(),
                 instances=self.instances,
-                labels=self.labels,
                 health_check=self.health_check.to_render() if self.health_check else None,
                 default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
@@ -251,7 +237,6 @@ class Service(Container):
     self._add_default_health_check()
     return dict(**super(Service, self).to_save(),
                 instances=self.instances,
-                labels=self.labels,
                 health_check=self.health_check.to_save() if self.health_check else None,
                 default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
@@ -274,7 +259,9 @@ class Service(Container):
         return params
       params += [dict(key='volume-driver',
                       value=self.appliance.data_persistence.volume_type.driver)]
-      params += [dict(key='volume', value='%s-%s:%s'%(self.appliance.id, v.src, v.dest))
+      params += [dict(key='volume',
+                      value=('%s-%s:%s'%(self.appliance.id, v.src, v.dest)
+                             if v.scope == VolumeScope.LOCAL else '%s:%s'%(v.src, v.dest)))
                  for v in self.persistent_volumes]
       return params
 
@@ -295,7 +282,6 @@ class Service(Container):
     r = dict(id=str(self), instances=self.instances,
              **self.resources.to_request(),
              env=merge_env(),
-             labels=self.labels,
              requirePorts=len(self.ports) > 0,
              acceptedResourceRoles=["slave_public", "*"],
              container=dict(type='DOCKER',

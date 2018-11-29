@@ -9,7 +9,7 @@ from locality import Placement
 @swagger.enum
 class PersistentVolumeType(Enum):
   """
-  Volume type
+  Persistent volume type
 
   """
   CEPHFS = 'cephfs', 'heliumdatacommons/cephfs'
@@ -105,6 +105,17 @@ class VolumeScheduleHints(schedule.ScheduleHints):
     super(VolumeScheduleHints, self).__init__(*args, **kwargs)
 
 
+@swagger.enum
+class VolumeScope(Enum):
+  """
+  Persistent volume scope
+
+  """
+
+  GLOBAL = 'GLOBAL'
+  LOCAL = 'LOCAL'
+
+
 @swagger.model
 class PersistentVolume:
   """
@@ -123,6 +134,8 @@ class PersistentVolume:
     if missing:
       return 400, None, "Missing required field(s) of persistence volume: %s"%missing
     if from_user:
+      for f in ('deployment', ):
+        data.pop('deployment', None)
       sched_hints = data.pop('schedule_hints', None)
       if sched_hints:
         status, sched_hints, err = VolumeScheduleHints.parse(sched_hints, from_user)
@@ -139,10 +152,11 @@ class PersistentVolume:
     return 200, PersistentVolume(**data), None
 
   def __init__(self, id, appliance, type, is_instantiated=False,
-               user_schedule_hints=None, sys_schedule_hints=None, deployment=None,
-               *args, **kwargs):
+               scope=VolumeScope.LOCAL, user_schedule_hints=None, sys_schedule_hints=None,
+               deployment=None, *args, **kwargs):
     self.__id = id
     self.__appliance = appliance
+    self.__scope = scope if isinstance(scope, VolumeScope) else VolumeScope(scope.upper())
     self.__type = type if isinstance(type, PersistentVolumeType) else PersistentVolumeType(type)
     self.__is_instantiated = is_instantiated
 
@@ -205,6 +219,17 @@ class PersistentVolume:
 
     """
     return self.__is_instantiated
+
+  @property
+  @swagger.property
+  def scope(self):
+    """
+    Persistent volume scope
+    ---
+    type: PersistentVolumeScope
+
+    """
+    return self.__scope
 
   @property
   @swagger.property
@@ -281,6 +306,7 @@ class PersistentVolume:
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value, is_instantiated=self.is_instantiated,
+                scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_render(),
                 sys_schedule_hints=self.sys_schedule_hints.to_render(),
                 deployment=self.deployment.to_render())
@@ -289,12 +315,14 @@ class PersistentVolume:
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value, is_instantiated=self.is_instantiated,
+                scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_save(),
                 sys_schedule_hints=self.sys_schedule_hints.to_save(),
                 deployment=self.deployment.to_render())
 
   def to_request(self):
-    req = dict(name='%s-%s'%(self.appliance, self.id))
+    req = dict(name=('%s-%s'%(self.appliance, self.id)
+                     if self.scope == VolumeScope.LOCAL else str(self.id)))
     sched_hints = self.sys_schedule_hints.placement
     if sched_hints.host:
       req['placement'] = dict(type='host', value=sched_hints.host)
