@@ -1,7 +1,7 @@
 import importlib
 
-import volume
 import schedule
+import volume
 
 from tornado.gen import multi
 
@@ -29,10 +29,12 @@ class ApplianceManager(Manager):
     app = Appliance(**app)
     status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
     if app.data_persistence:
-      status, app.data_persistence.volumes, err = await self.__vol_mgr.get_volumes(appliance=app_id)
+      _, local_vols, _ = await self.__vol_mgr.get_local_volumes(appliance=app_id)
+      _, global_vols, _ = await self.__vol_mgr.get_global_volumes_by_appliance(app_id)
+      app.data_persistence.volumes = local_vols + global_vols
     if len(app.containers) == 0 \
         and (not app.data_persistence or len(app.data_persistence.volumes) == 0):
-      self.__app_db.delete_appliance(app_id)
+      await self.__app_db.delete_appliance(app_id)
       return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
@@ -44,6 +46,14 @@ class ApplianceManager(Manager):
       all_vols = set(vols_existed) | set(vols_declared)
       vols_to_mount = set([pv.src for c in app.containers for pv in c.persistent_volumes])
       return list(vols_to_mount - all_vols)
+
+    async def update_global_volumes(global_vols, app_id):
+      for gpv in global_vols:
+        gpv.subscribe(app_id)
+      resps = await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])
+      for status, _, err in resps:
+        if status != 200:
+          self.logger.error(err)
 
     def set_container_volume_scope(contrs, vols):
       vols = {v.id: v for v in vols}
@@ -63,15 +73,15 @@ class ApplianceManager(Manager):
     # create persistent volumes if any
     dp = app.data_persistence
     if dp:
-      resps = await multi([vol_mgr.get_volume(app.id if v.scope == volume.VolumeScope.LOCAL
-                                              else None, v.id)
-                           for v in dp.volumes])
+      resps = await multi([vol_mgr.get_local_volume(app.id, v.id) for v in dp.local_volumes]
+                          + [vol_mgr.get_global_volume(v.id) for v in dp.global_volumes])
       vols_existed = set([v.id for status, v, _ in resps if status == 200])
       vols_declared = set([v.id for v in dp.volumes])
       invalid_vols = validate_volume_mounts(app, vols_existed, vols_declared)
       if len(invalid_vols) > 0:
         await self._clean_up_incomplete_appliance(app.id)
         return 400, None, 'Invalid persistent volume(s): %s'%invalid_vols
+      global_vols = [v for _, v, _ in resps if v and v.scope == volume.VolumeScope.GLOBAL]
       if len(vols_existed) < len(dp.volumes):
         resps = await multi([vol_mgr.create_volume(v.to_save())
                              for v in dp.volumes
@@ -81,6 +91,9 @@ class ApplianceManager(Manager):
             self.logger.error(err)
             await self._clean_up_incomplete_appliance(app.id)
             return status, None, err
+          if v.scope == volume.VolumeScope.GLOBAL:
+            global_vols += v,
+      await update_global_volumes(global_vols, app.id)
       set_container_volume_scope(app.containers, dp.volumes)
 
     # create containers
@@ -119,15 +132,20 @@ class ApplianceManager(Manager):
 
     # deprovision/delete local persistent volumes if any
     if app.data_persistence:
-      _, vols, _ = await vol_mgr.get_volumes(appliance=app_id)
-      resps = await multi([(vol_mgr.erase_volume(app_id, v.id)
+      _, local_vols, _ = await vol_mgr.get_local_volumes(appliance=app_id)
+      resps = await multi([(vol_mgr.erase_local_volume(app_id, v.id)
                             if erase_data else vol_mgr.deprovision_volume(v))
-                           for v in vols
-                           if v.scope == volume.VolumeScope.LOCAL])
+                           for v in local_vols])
       for i, (status, _, err) in enumerate(resps):
         if status != 200:
           self.logger.error(err)
-          return 207, None, "Failed to deprovision persistent volume '%s'"%vols[i].id
+          return 207, None, "Failed to deprovision persistent volume '%s'"%local_vols[i].id
+      _, global_vols, _ = await vol_mgr.get_global_volumes_by_appliance(app_id)
+      for gpv in global_vols:
+        gpv.unsubscribe(app_id)
+      for status, _, err in (await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])):
+        if status != 200:
+          self.logger.error(err)
 
     # deprovision appliance
     status, msg, err = await self.__app_api.deprovision_appliance(app_id)

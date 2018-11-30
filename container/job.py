@@ -1,6 +1,7 @@
 import swagger
 
 from container import Container, NetworkMode, parse_container_short_id
+from volume import VolumeScope
 
 # Limitations:
 # 1. Inefficient job state monitoring: Chronos does not have an API for per-job state
@@ -116,7 +117,9 @@ class Job(Container):
         return params
       params += [dict(key='volume-driver',
                       value=self.appliance.data_persistence.volume_type.driver)]
-      params += [dict(key='volume', value='%s-%s:%s'%(self.appliance.id, v.src, v.dest))
+      params += [dict(key='volume',
+                      value=('%s-%s:%s'%(self.appliance.id, v.src, v.dest)
+                             if v.scope == VolumeScope.LOCAL else '%s:%s'%(v.src, v.dest)))
                  for v in self.persistent_volumes]
       return params
 

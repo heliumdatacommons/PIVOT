@@ -41,7 +41,7 @@ class VolumesHandler(RequestHandler, Loggable):
             schema: Error
 
     """
-    status, vols, err = await self.__vol_mgr.get_volumes(appliance=app_id)
+    status, vols, err = await self.__vol_mgr.get_local_volumes(appliance=app_id)
     self.set_status(status)
     self.write(json_encode([v.to_render() for v in vols] if status == 200 else error(err)))
 
@@ -82,7 +82,7 @@ class VolumeHandler(RequestHandler, Loggable):
             schema: Error
 
     """
-    status, vol, err = await self.__vol_mgr.get_volume(app_id, vol_id)
+    status, vol, err = await self.__vol_mgr.get_local_volume(app_id, vol_id)
     self.set_status(status)
     self.write(json_encode(vol.to_render() if status == 200 else error(err)))
 
@@ -110,7 +110,7 @@ class VolumeHandler(RequestHandler, Loggable):
             schema: Error
 
     """
-    status, msg, err = await self.__vol_mgr.erase_volume(app_id, vol_id)
+    status, msg, err = await self.__vol_mgr.erase_local_volume(app_id, vol_id)
     self.set_status(status)
     self.write(json_encode(message(msg) if status == 200 else error(err)))
 

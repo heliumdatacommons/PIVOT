@@ -70,16 +70,39 @@ class DataPersistence:
     return self.__volume_type
 
   @property
+  @swagger.property
   def volumes(self):
     """
-    Volumes for data persistence in the appliance
+    Persistent volumes used by the appliance
     ---
     type: list
-    items: Volume
+    items: PersistentVolume
     required: true
 
     """
     return list(self.__volumes)
+
+  @property
+  def global_volumes(self):
+    """
+    Global persistent volumes used by the appliance
+    ---
+    type: list
+    item: GlobalPersistentVolume
+
+    """
+    return [v for v in self.__volumes if isinstance(v, GlobalPersistentVolume)]
+
+  @property
+  def local_volumes(self):
+    """
+    Local persistent volumes bound to the appliance
+    ---
+    type: list
+    item: LocalPersistentVolume
+
+    """
+    return [v for v in self.__volumes if isinstance(v, LocalPersistentVolume)]
 
   @volumes.setter
   def volumes(self, volumes):
@@ -133,6 +156,11 @@ class PersistentVolume:
     missing = PersistentVolume.REQUIRED - data.keys()
     if missing:
       return 400, None, "Missing required field(s) of persistence volume: %s"%missing
+    scope = data.get('scope', 'local')
+    try:
+      scope = VolumeScope(scope and scope.upper())
+    except ValueError:
+      return 400, None, "Invalid volume scope: %s"%data.get('scope')
     if from_user:
       for f in ('deployment', ):
         data.pop('deployment', None)
@@ -149,13 +177,19 @@ class PersistentVolume:
         _, data['user_schedule_hints'], _ = VolumeScheduleHints.parse(user_sched_hints, from_user)
       if sys_sched_hints:
         _, data['sys_schedule_hints'], _ = VolumeScheduleHints.parse(sys_sched_hints, from_user)
-    return 200, PersistentVolume(**data), None
+    vol = None
+    if scope == VolumeScope.LOCAL:
+      vol = LocalPersistentVolume(**data)
+    elif scope == VolumeScope.GLOBAL:
+      vol = GlobalPersistentVolume(**data)
+    else:
+      return 400, None, "Unrecognized volume scope: %s"%vol.value
+    return 200, vol, None
 
-  def __init__(self, id, appliance, type, is_instantiated=False,
+  def __init__(self, id, type, is_instantiated=False,
                scope=VolumeScope.LOCAL, user_schedule_hints=None, sys_schedule_hints=None,
                deployment=None, *args, **kwargs):
     self.__id = id
-    self.__appliance = appliance
     self.__scope = scope if isinstance(scope, VolumeScope) else VolumeScope(scope.upper())
     self.__type = type if isinstance(type, PersistentVolumeType) else PersistentVolumeType(type)
     self.__is_instantiated = is_instantiated
@@ -181,7 +215,6 @@ class PersistentVolume:
     else:
       self.__deployment = VolumeDeployment()
 
-
   @property
   @swagger.property
   def id(self):
@@ -194,19 +227,6 @@ class PersistentVolume:
 
     """
     return self.__id
-
-  @property
-  @swagger.property
-  def appliance(self):
-    """
-    The appliance in which the volume is shared
-    ---
-    type: str
-    example: test-app
-    read_only: true
-
-    """
-    return self.__appliance
 
   @property
   @swagger.property
@@ -278,11 +298,6 @@ class PersistentVolume:
     """
     return self.__deployment
 
-  @appliance.setter
-  def appliance(self, app):
-    assert isinstance(app, str) or isinstance(app, appliance.Appliance)
-    self.__appliance = app
-
   @type.setter
   def type(self, type):
     self.__type = type
@@ -304,8 +319,8 @@ class PersistentVolume:
 
   def to_render(self):
     return dict(id=self.id,
-                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
-                type=self.type.value, is_instantiated=self.is_instantiated,
+                type=self.type.value,
+                is_instantiated=self.is_instantiated,
                 scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_render(),
                 sys_schedule_hints=self.sys_schedule_hints.to_render(),
@@ -313,8 +328,8 @@ class PersistentVolume:
 
   def to_save(self):
     return dict(id=self.id,
-                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
-                type=self.type.value, is_instantiated=self.is_instantiated,
+                type=self.type.value,
+                is_instantiated=self.is_instantiated,
                 scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_save(),
                 sys_schedule_hints=self.sys_schedule_hints.to_save(),
@@ -372,3 +387,66 @@ class VolumeDeployment:
 
   def to_save(self):
     return dict(placement=self.placement.to_render())
+  
+
+@swagger.model
+class GlobalPersistentVolume(PersistentVolume):
+  
+  def __init__(self, used_by=[], *args, **kwargs):
+    kwargs.update(scope=VolumeScope.GLOBAL)
+    super(GlobalPersistentVolume, self).__init__(*args, **kwargs)
+    self.__used_by = set(used_by)
+    
+  @property
+  @swagger.property
+  def used_by(self):
+    """
+    Appliances that use the volume
+    ---
+    type: list
+    items: str
+
+    """
+    return list(self.__used_by)
+
+  def subscribe(self, app_id):
+    self.__used_by.add(app_id)
+
+  def unsubscribe(self, app_id):
+    self.__used_by.remove(app_id)
+
+  def to_save(self):
+    return dict(**super(GlobalPersistentVolume, self).to_save(), used_by=self.used_by)
+  
+
+@swagger.model
+class LocalPersistentVolume(PersistentVolume):
+  
+  def __init__(self, appliance, *args, **kwargs):
+    kwargs.update(scope=VolumeScope.LOCAL)
+    super(LocalPersistentVolume, self).__init__(*args, **kwargs)
+    self.__appliance = appliance
+
+  @property
+  @swagger.property
+  def appliance(self):
+    """
+    The appliance which the persistent volume is bound to
+    ---
+    type: str
+
+    """
+    return self.__appliance
+
+  @appliance.setter
+  def appliance(self, app):
+    assert isinstance(app, str) or isinstance(app, appliance.Appliance)
+    self.__appliance = app
+
+  def to_render(self):
+    return dict(**super(LocalPersistentVolume, self).to_render(),
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id)
+
+  def to_save(self):
+    return dict(**super(LocalPersistentVolume, self).to_save(),
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id)
