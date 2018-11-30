@@ -110,7 +110,7 @@ class VolumeHandler(RequestHandler, Loggable):
             schema: Error
 
     """
-    status, msg, err = await self.__vol_mgr.erase_local_volume(app_id, vol_id)
+    status, msg, err = await self.__vol_mgr.purge_local_volume(app_id, vol_id)
     self.set_status(status)
     self.write(json_encode(message(msg) if status == 200 else error(err)))
 

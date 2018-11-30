@@ -114,12 +114,12 @@ class ApplianceHandler(RequestHandler, Loggable):
           application/json:
             schema: Error
     """
-    erase_data = self.get_query_argument('erase_data', False)
-    if not isinstance(erase_data, bool) and erase_data.lower() not in ('true', 'false'):
+    purge_data = self.get_query_argument('purge', False)
+    if not isinstance(purge_data, bool) and purge_data.lower() not in ('true', 'false'):
       self.set_status(400)
-      self.write(error(400, "Unrecognized 'erase_data' value: %s"%erase_data))
+      self.write(error(400, "Unrecognized 'purge_data' value: %s"%purge_data))
       return
-    erase_data = erase_data and erase_data.lower() == 'true'
-    status, msg, err = await self.__app_mgr.delete_appliance(app_id, erase_data=erase_data)
+    purge_data = purge_data and purge_data.lower() == 'true'
+    status, msg, err = await self.__app_mgr.delete_appliance(app_id, purge_data=purge_data)
     self.set_status(status)
     self.write(json.dumps(message(msg) if status == 200 else error(err)))

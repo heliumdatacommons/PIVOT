@@ -114,9 +114,9 @@ class ApplianceManager(Manager):
     ApplianceScheduleExecutor(app.id, scheduler).start()
     return 201, app, None
 
-  async def delete_appliance(self, app_id, erase_data=False):
+  async def delete_appliance(self, app_id, purge_data=False):
     vol_mgr = self.__vol_mgr
-    self.logger.info('Erase data?: %s'%erase_data)
+    self.logger.debug('Purge data?: %s' % purge_data)
     status, app, err = await self.get_appliance(app_id)
     if status != 200:
       self.logger.error(err)
@@ -133,8 +133,8 @@ class ApplianceManager(Manager):
     # deprovision/delete local persistent volumes if any
     if app.data_persistence:
       _, local_vols, _ = await vol_mgr.get_local_volumes(appliance=app_id)
-      resps = await multi([(vol_mgr.erase_local_volume(app_id, v.id)
-                            if erase_data else vol_mgr.deprovision_volume(v))
+      resps = await multi([(vol_mgr.purge_local_volume(app_id, v.id)
+                            if purge_data else vol_mgr.deprovision_volume(v))
                            for v in local_vols])
       for i, (status, _, err) in enumerate(resps):
         if status != 200:
@@ -152,7 +152,7 @@ class ApplianceManager(Manager):
     if status != 200 and status != 404:
       self.logger.error(err)
       return 207, None, "Failed to deprovision appliance '%s'"%app_id
-    if erase_data:
+    if purge_data:
       await self.__app_db.delete_appliance(app_id)
     ApplianceDeletionChecker(app_id).start()
     return status, msg, None

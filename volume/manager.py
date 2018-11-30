@@ -83,20 +83,20 @@ class VolumeManager(Manager):
     await self.__vol_db.save_volume(vol)
     return status, "Persistent volume '%s' has been deprovisioned"%vol.id, None
 
-  async def erase_global_volume(self, vol_id):
+  async def purge_global_volume(self, vol_id):
     status, vol, err = await self.get_global_volume(vol_id)
     if status != 200:
       return status, None, err
     if len(vol.used_by) > 0:
       return 400, None, "Global persistent volume '%s' is in use by appliance(s): " \
                         "%s"%(vol_id, vol.used_by)
-    status, msg, err = await self.__vol_api.delete_global_volume(vol_id, erasure=True)
+    status, msg, err = await self.__vol_api.delete_global_volume(vol_id, purge=True)
     if status != 200:
       return status, None, err
     await self.__vol_db.delete_volume(vol)
-    return status, "Persistent volume '%s' has been erased" % vol, None
+    return status, "Persistent volume '%s' has been purged" % vol, None
 
-  async def erase_local_volume(self, app_id, vol_id):
+  async def purge_local_volume(self, app_id, vol_id):
     status, vol, err = await self.get_local_volume(app_id, vol_id, full_blown=True)
     if status != 200:
       return status, None, err
@@ -105,11 +105,11 @@ class VolumeManager(Manager):
     if len(in_use) > 0:
       return 400, None, "Local persistent volume '%s' is in use by container(s): " \
                         "%s"%(vol_id, list(in_use))
-    status, msg, err = await self.__vol_api.delete_local_volume(app_id, vol_id, erasure=True)
+    status, msg, err = await self.__vol_api.delete_local_volume(app_id, vol_id, purge=True)
     if status != 200:
       return status, None, err
     await self.__vol_db.delete_volume(vol)
-    return status, "Persistent volume '%s' has been erased"%vol, None
+    return status, "Persistent volume '%s' has been purged"%vol, None
 
   async def get_global_volume(self, vol_id):
     status, vol, err = await self._get_volume(self.__vol_db.get_global_volume,
@@ -187,11 +187,11 @@ class VolumeAPIManager(APIManager):
     api = config.ceph
     return await self.http_cli.post(api.host, api.port, '/fs', dict(vol.to_request()))
 
-  async def delete_global_volume(self, vol_id, erasure=False):
-    return await self._delete_volume(str(vol_id), erasure)
+  async def delete_global_volume(self, vol_id, purge=False):
+    return await self._delete_volume(str(vol_id), purge)
 
-  async def delete_local_volume(self, app_id, vol_id, erasure=False):
-    return await self._delete_volume('%s-%s'%(app_id, vol_id), erasure)
+  async def delete_local_volume(self, app_id, vol_id, purge=False):
+    return await self._delete_volume('%s-%s' % (app_id, vol_id), purge)
 
   async def _get_volume(self, ext_vol_id):
     api = config.ceph
@@ -200,9 +200,9 @@ class VolumeAPIManager(APIManager):
       return status, None, err
     return status, vol, None
 
-  async def _delete_volume(self, ext_vol_id, erasure=False):
+  async def _delete_volume(self, ext_vol_id, purge=False):
     api = config.ceph
-    return await self.http_cli.delete(api.host, api.port, '/fs/%s?erasure=%s'%(ext_vol_id, erasure))
+    return await self.http_cli.delete(api.host, api.port, '/fs/%s?purge=%s' % (ext_vol_id, purge))
 
 
 class VolumeDBManager(Manager):
