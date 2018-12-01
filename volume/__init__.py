@@ -21,6 +21,16 @@ class PersistentVolumeType(Enum):
     return obj
 
 
+@swagger.enum
+class PersistentVolumeState(Enum):
+  """
+  Persistent volume state
+  """
+  CREATED = 'created'
+  INACTIVE = 'inactive'
+  ACTIVE = 'active'
+
+
 @swagger.model
 class DataPersistence:
   """
@@ -163,7 +173,7 @@ class PersistentVolume:
       return 400, None, "Invalid volume scope: %s"%data.get('scope')
     if from_user:
       for f in ('deployment', ):
-        data.pop('deployment', None)
+        data.pop(f, None)
       sched_hints = data.pop('schedule_hints', None)
       if sched_hints:
         status, sched_hints, err = VolumeScheduleHints.parse(sched_hints, from_user)
@@ -186,13 +196,13 @@ class PersistentVolume:
       return 400, None, "Unrecognized volume scope: %s"%vol.value
     return 200, vol, None
 
-  def __init__(self, id, type, is_instantiated=False,
+  def __init__(self, id, type, state=PersistentVolumeState.CREATED,
                scope=VolumeScope.LOCAL, user_schedule_hints=None, sys_schedule_hints=None,
                deployment=None, *args, **kwargs):
-    self.__id = id
-    self.__scope = scope if isinstance(scope, VolumeScope) else VolumeScope(scope.upper())
-    self.__type = type if isinstance(type, PersistentVolumeType) else PersistentVolumeType(type)
-    self.__is_instantiated = is_instantiated
+    self.__id = str(id)
+    self.__scope = VolumeScope(scope.upper()) if isinstance(scope, str) else scope
+    self.__type = PersistentVolumeType(type.lower()) if isinstance(type, str) else type
+    self.__state = PersistentVolumeState(state.lower()) if isinstance(state, str) else state
 
     if isinstance(user_schedule_hints, dict):
       self.__user_schedule_hints = VolumeScheduleHints(**user_schedule_hints)
@@ -230,15 +240,25 @@ class PersistentVolume:
 
   @property
   @swagger.property
-  def is_instantiated(self):
+  def type(self):
     """
-    Whether the volume is instantiated
+    Volume type
     ---
-    type: bool
-    read_only: true
+    type: PersistentVolumeType
+    example: cephfs
 
     """
-    return self.__is_instantiated
+    return self.__type
+
+  @property
+  def state(self):
+    """
+    Volume state
+    ---
+    type: PersistentVolumeState
+
+    """
+    return self.__state
 
   @property
   @swagger.property
@@ -250,18 +270,6 @@ class PersistentVolume:
 
     """
     return self.__scope
-
-  @property
-  @swagger.property
-  def type(self):
-    """
-    Volume type
-    ---
-    type: Volume
-    example: cephfs
-
-    """
-    return self.__type
 
   @property
   @swagger.property
@@ -298,6 +306,10 @@ class PersistentVolume:
     """
     return self.__deployment
 
+  @property
+  def is_active(self):
+    return self.__state == PersistentVolumeState.ACTIVE
+
   @type.setter
   def type(self, type):
     self.__type = type
@@ -311,16 +323,16 @@ class PersistentVolume:
   def deployment(self, deployment):
     self.__deployment = deployment
 
-  def set_instantiated(self):
-    self.__is_instantiated = True
+  def set_active(self):
+    self.__state = PersistentVolumeState.ACTIVE
 
-  def unset_instantiated(self):
-    self.__is_instantiated = False
+  def set_inactive(self):
+    self.__state = PersistentVolumeState.INACTIVE
 
   def to_render(self):
     return dict(id=self.id,
                 type=self.type.value,
-                is_instantiated=self.is_instantiated,
+                state=self.state.value,
                 scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_render(),
                 sys_schedule_hints=self.sys_schedule_hints.to_render(),
@@ -329,7 +341,7 @@ class PersistentVolume:
   def to_save(self):
     return dict(id=self.id,
                 type=self.type.value,
-                is_instantiated=self.is_instantiated,
+                state=self.state.value,
                 scope=self.scope.value,
                 user_schedule_hints=self.user_schedule_hints.to_save(),
                 sys_schedule_hints=self.sys_schedule_hints.to_save(),
@@ -363,7 +375,7 @@ class PersistentVolume:
                  and self.appliance == other.appliance))
 
   def __str__(self):
-    return '%s-%s'%(self.appliance, self.id)
+    return '%s-%s'%(self.appliance, self.id) if self.scope == VolumeScope.LOCAL else str(self.id)
 
 
 @swagger.model

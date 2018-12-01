@@ -3,7 +3,6 @@ import tornado
 from tornado.web import Application, StaticFileHandler
 from tornado.httpserver import HTTPServer
 
-
 from appliance import Appliance
 from container import Container
 from volume import PersistentVolume
@@ -11,7 +10,7 @@ from cluster.handler import ClusterInfoHandler
 from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
-from volume.handler import VolumesHandler, VolumeHandler
+from volume.handler import ApplianceVolumesHandler, ApplianceVolumeHandler, GlobalVolumeHandler
 from cluster.manager import ClusterManager
 from index.handler import IndexHandler
 from ping.handler import PingHandler
@@ -38,14 +37,15 @@ def start_server():
     (r'/appliance\/*', AppliancesHandler),
     (r'/appliance/(%s)\/*'%Appliance.ID_PATTERN, ApplianceHandler),
     (r'/appliance/(%s)/container\/*'%Appliance.ID_PATTERN, ContainersHandler),
-    (r'/appliance/(%s)/volume\/*' % Appliance.ID_PATTERN, VolumesHandler),
+    (r'/appliance/(%s)/volume\/*' % Appliance.ID_PATTERN, ApplianceVolumesHandler),
     (r'/appliance/(%s)/service\/*'%Appliance.ID_PATTERN, ServicesHandler),
     (r'/appliance/(%s)/job\/*'%Container.ID_PATTERN, JobsHandler),
     (r'/appliance/(%s)/ui\/*'%Appliance.ID_PATTERN, ApplianceUIHandler),
     (r'/appliance/(%s)/container/(%s)\/*'%(Appliance.ID_PATTERN,
                                            Container.ID_PATTERN), ContainerHandler),
-    (r'/appliance/(%s)/volume/(%s)\/*' % (Appliance.ID_PATTERN,
-                                          PersistentVolume.ID_PATTERN), VolumeHandler),
+    (r'/appliance/(%s)/volume/(%s)\/*'%(Appliance.ID_PATTERN,
+                                        PersistentVolume.ID_PATTERN), ApplianceVolumeHandler),
+    (r'/volume/(%s)\/*'%PersistentVolume.ID_PATTERN, GlobalVolumeHandler),
     (r'/static/(.*)', StaticFileHandler, dict(path='%s/static'%dirname(__file__))),
     (r'/api', SwaggerAPIHandler),
     (r'/api/ui', SwaggerUIHandler),

@@ -1,11 +1,14 @@
-import appliance.manager
+import appliance
+import volume
 
 from abc import ABCMeta
+from itertools import groupby
 
 from schedule import SchedulePlan
 from schedule.universal import GlobalScheduleExecutor
 from commons import AutonomousMonitor, Loggable
 from config import get_global_scheduler
+from locality import Placement
 
 
 class ApplianceScheduleExecutor(AutonomousMonitor):
@@ -63,6 +66,10 @@ from container import ContainerState, ContainerType, ContainerVolumeType
 
 
 class DefaultApplianceScheduler(ApplianceScheduler):
+  """
+  Greedy bin-packing heuristic
+
+  """
 
   def __init__(self, *args, **kwargs):
     super(DefaultApplianceScheduler, self).__init__(*args, **kwargs)
@@ -84,12 +91,12 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     contrs_to_create = [c for c in free_contrs
                         if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)]
     for c in contrs_to_create:
-      c.sys_schedule_hints = c.user_schedule_hints
+      c.sys_schedult_hints = c.user_schedule_hints
     vols_declared = {v.id: v for v in app.volumes}
-    vols_to_create = set([v.src for c in free_contrs for v in c.persistent_volumes
+    vols_to_create = set([v.src for c in contrs_to_create for v in c.persistent_volumes
                           if v.type == ContainerVolumeType.PERSISTENT
                           and v.src in vols_declared
-                          and not vols_declared[v.src].is_instantiated])
+                          and not vols_declared[v.src].is_active])
     for vid in vols_to_create:
       vols_declared[vid].sys_schedule_hints = vols_declared[vid].user_schedule_hints
     sched.add_containers(contrs_to_create)
@@ -104,3 +111,29 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     for c in contrs.values():
       parents.setdefault(c.id, set()).update([d for d in c.dependencies if d in contrs])
     return [contrs[k] for k, v in parents.items() if not v]
+
+  def find_placement(self, contrs, agents):
+    import container
+    placement = Placement()
+    cpus_demanded = sum([(c.resources.cpus * c.instances
+                          if isinstance(c, container.service.Service) else c.resources.cpus)
+                         for c in contrs])
+    for locality in ('host', 'zone', 'region', 'cloud', ):
+      agents = list(sorted(agents, key=lambda a: a.attributes[locality]))
+      key, cpus_avail = max([(k, sum([a.resources.cpus for a in group]))
+                             for k, group in groupby(agents, lambda a: a.attributes[locality])],
+                            key=lambda x: x[1])
+      self.logger.info('locality: %s, value: %s, '
+                       'CPU available: %.1f, CPU demanded: %.1f'%(locality, key, cpus_avail, cpus_demanded))
+      if cpus_avail >= cpus_demanded:
+        if locality == 'host':
+          placement.host = key
+        elif locality == 'zone':
+          placement.zone = key
+        elif locality == 'region':
+          placement.region = key
+        elif locality == 'cloud':
+          placement.region = key
+        break
+    return placement
+

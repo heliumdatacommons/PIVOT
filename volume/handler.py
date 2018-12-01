@@ -1,5 +1,6 @@
 import swagger
 
+from tornado.gen import multi
 from tornado.web import RequestHandler
 from tornado.escape import json_encode
 
@@ -8,7 +9,7 @@ from commons import Loggable
 from util import message, error
 
 
-class VolumesHandler(RequestHandler, Loggable):
+class ApplianceVolumesHandler(RequestHandler, Loggable):
   """
   ---
   - name: app_id
@@ -33,7 +34,7 @@ class VolumesHandler(RequestHandler, Loggable):
           application/json:
             schema:
               type: list
-              items: Volume
+              items: PersistentVolume
       404:
         description: the requested appliance does not exist
         content:
@@ -41,12 +42,20 @@ class VolumesHandler(RequestHandler, Loggable):
             schema: Error
 
     """
-    status, vols, err = await self.__vol_mgr.get_local_volumes(appliance=app_id)
-    self.set_status(status)
-    self.write(json_encode([v.to_render() for v in vols] if status == 200 else error(err)))
+    vol_mgr = self.__vol_mgr
+    resps = await multi([vol_mgr.get_local_volumes(appliance=app_id),
+                         vol_mgr.get_global_volumes_by_appliance(app_id)])
+    volumes = []
+    for status, vols, err in resps:
+      if status != 200:
+        self.set_status(status)
+        self.write(error(err))
+        return
+      volumes += vols
+    self.write(json_encode([v.to_render() for v in volumes]))
 
 
-class VolumeHandler(RequestHandler, Loggable):
+class ApplianceVolumeHandler(RequestHandler, Loggable):
   """
   ---
   - name: app_id
@@ -56,7 +65,7 @@ class VolumeHandler(RequestHandler, Loggable):
 
   - name: vol_id
     required: true
-    description: persistent volume ID
+    description: local persistent volume ID
     type: str
 
   """
@@ -67,7 +76,7 @@ class VolumeHandler(RequestHandler, Loggable):
   @swagger.operation
   async def get(self, app_id, vol_id):
     """
-    Get persistent volume
+    Get local persistent volume
     ---
     responses:
       200:
@@ -89,14 +98,14 @@ class VolumeHandler(RequestHandler, Loggable):
   @swagger.operation
   async def delete(self, app_id, vol_id):
     """
-    Delete persistent volume
+    Delete local persistent volume
     ---
     responses:
       200:
-        description: the requested volume is found and returned
+        description: the requested local volume is purged
         content:
           application/json:
-            schema: PersistentVolume
+            schema: Message
       400:
         description: >
           the requested volume is in use by container(s) in the appliance and cannot be deleted yet
@@ -115,4 +124,67 @@ class VolumeHandler(RequestHandler, Loggable):
     self.write(json_encode(message(msg) if status == 200 else error(err)))
 
 
+class GlobalVolumeHandler(RequestHandler, Loggable):
+  """
+  ---
+  - name: vol_id
+    required: true
+    description: global persistent volume ID
+    type: str
+
+  """
+
+  def initialize(self):
+    self.__vol_mgr = VolumeManager()
+
+  @swagger.operation
+  async def get(self, vol_id):
+    """
+    Get global persistent volume
+    ---
+    responses:
+      200:
+        description: the requested global volume is found and returned
+        content:
+          application/json:
+            schema: Message
+      404:
+        description: the requested global volume is not found
+        content:
+          application/json:
+            schema: Error
+
+    """
+    status, vol, err = await self.__vol_mgr.get_global_volume(vol_id)
+    self.set_status(status)
+    self.write(vol.to_render() if status == 200 else error(err))
+
+  @swagger.operation
+  async def delete(self, vol_id):
+    """
+    Delete global persistent volume
+    ---
+    responses:
+      200:
+        description: the requested volume is purged
+        content:
+          application/json:
+            schema: Message
+      400:
+        description: >
+          the requested global volume is in use by container(s) in the appliance and cannot be
+          purged yet
+        content:
+          application/json:
+            schema: Error
+      404:
+        description: the requested volume is not found
+        content:
+          application/json:
+            schema: Error
+
+    """
+    status, msg, err = await self.__vol_mgr.purge_global_volume(vol_id)
+    self.set_status(status)
+    self.write(json_encode(message(msg) if status == 200 else error(err)))
 

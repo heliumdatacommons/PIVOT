@@ -140,12 +140,13 @@ class ApplianceManager(Manager):
         if status != 200:
           self.logger.error(err)
           return 207, None, "Failed to deprovision persistent volume '%s'"%local_vols[i].id
-      _, global_vols, _ = await vol_mgr.get_global_volumes_by_appliance(app_id)
-      for gpv in global_vols:
-        gpv.unsubscribe(app_id)
-      for status, _, err in (await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])):
-        if status != 200:
-          self.logger.error(err)
+      if purge_data:
+        _, global_vols, _ = await vol_mgr.get_global_volumes_by_appliance(app_id)
+        for gpv in global_vols:
+          gpv.unsubscribe(app_id)
+        for status, _, err in (await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])):
+          if status != 200:
+            self.logger.error(err)
 
     # deprovision appliance
     status, msg, err = await self.__app_api.deprovision_appliance(app_id)

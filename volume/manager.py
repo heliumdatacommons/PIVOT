@@ -60,7 +60,7 @@ class VolumeManager(Manager):
     if status != 200:
       self.logger.error(err)
       return status, None, err
-    vol.set_instantiated()
+    vol.set_active()
     await self.__vol_db.save_volume(vol)
     return status, vol, None
 
@@ -79,7 +79,7 @@ class VolumeManager(Manager):
     if status != 200:
       self.logger.error(err)
       return status, _, err
-    vol.unset_instantiated()
+    vol.set_inactive()
     await self.__vol_db.save_volume(vol)
     return status, "Persistent volume '%s' has been deprovisioned"%vol.id, None
 
@@ -88,13 +88,16 @@ class VolumeManager(Manager):
     if status != 200:
       return status, None, err
     if len(vol.used_by) > 0:
-      return 400, None, "Global persistent volume '%s' is in use by appliance(s): " \
-                        "%s"%(vol_id, vol.used_by)
+      return 400, None, "Failed to delete the global persistent volume '%s': " \
+                        "being used by appliance(s): %s"%(vol_id, vol.used_by)
+    status, msg, err = await self.deprovision_volume(vol)
+    if status != 200:
+      return status, None, err
     status, msg, err = await self.__vol_api.delete_global_volume(vol_id, purge=True)
     if status != 200:
       return status, None, err
     await self.__vol_db.delete_volume(vol)
-    return status, "Persistent volume '%s' has been purged" % vol, None
+    return status, "Global persistent volume '%s' has been purged" % vol, None
 
   async def purge_local_volume(self, app_id, vol_id):
     status, vol, err = await self.get_local_volume(app_id, vol_id, full_blown=True)
@@ -103,13 +106,13 @@ class VolumeManager(Manager):
     in_use = set([c.id for c in vol.appliance.containers
                   for v in c.persistent_volumes if v.src == vol_id])
     if len(in_use) > 0:
-      return 400, None, "Local persistent volume '%s' is in use by container(s): " \
-                        "%s"%(vol_id, list(in_use))
+      return 400, None, "Failed to delete the local persistent volume '%s':  " \
+                        "being used by container(s): %s"%(vol_id, list(in_use))
     status, msg, err = await self.__vol_api.delete_local_volume(app_id, vol_id, purge=True)
     if status != 200:
       return status, None, err
     await self.__vol_db.delete_volume(vol)
-    return status, "Persistent volume '%s' has been purged"%vol, None
+    return status, "Local persistent volume '%s' has been purged"%vol, None
 
   async def get_global_volume(self, vol_id):
     status, vol, err = await self._get_volume(self.__vol_db.get_global_volume,
@@ -149,7 +152,6 @@ class VolumeManager(Manager):
       if i == 0:
         vol = output
       elif i == 1:
-        self.logger.info(str(output))
         vol.deployment = VolumeDeployment(placement=Placement(**output['placement']))
     return status, vol, None
 
