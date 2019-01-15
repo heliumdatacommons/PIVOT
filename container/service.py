@@ -160,26 +160,12 @@ class Service(Container):
 
   """
 
-  def __init__(self, instances=1, health_check=None, default_health_check=False,
+  def __init__(self, health_check=None, default_health_check=False,
                minimum_capacity=0, *args, **kwargs):
     super(Service, self).__init__(*args, **kwargs)
-    self.__instances = instances
     self.__health_check = health_check and HealthCheck(**health_check)
     self.__default_health_check = default_health_check
     self.__minimum_capacity = minimum_capacity
-
-  @property
-  @swagger.property
-  def instances(self):
-    """
-    Number of instances created for the service
-    ---
-    type: int
-    default: 1
-    example: 1
-
-    """
-    return self.__instances
 
   @property
   @swagger.property
@@ -228,7 +214,6 @@ class Service(Container):
 
   def to_render(self):
     return dict(**super(Service, self).to_render(),
-                instances=self.instances,
                 health_check=self.health_check.to_render() if self.health_check else None,
                 default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
@@ -236,7 +221,6 @@ class Service(Container):
   def to_save(self):
     self._add_default_health_check()
     return dict(**super(Service, self).to_save(),
-                instances=self.instances,
                 health_check=self.health_check.to_save() if self.health_check else None,
                 default_health_check=self.default_health_check,
                 minimum_capacity=self.minimum_capacity)
@@ -279,7 +263,7 @@ class Service(Container):
 
     self._add_default_health_check()
     params = get_default_parameters() + get_persistent_volumes()
-    r = dict(id=str(self), instances=self.instances,
+    r = dict(id=str(self),
              **self.resources.to_request(),
              env=merge_env(),
              requirePorts=len(self.ports) > 0,

@@ -52,7 +52,6 @@ class ClusterMonitor(AutonomousMonitor):
     return self.__last_update
 
   async def update(self):
-    await self._discover_chronos()
     status, agents, err = await self.__api.get_agents()
     if status == 200:
       agents_in_db = set(a.id for a in (await self.__agent_db.get_all_agents()))
@@ -81,18 +80,12 @@ class ClusterMonitor(AutonomousMonitor):
         return leader
     raise Exception('Cannot find leader. Probably all the registered masters are down')
 
-  async def _discover_chronos(self):
-    status, body, err = await self.__api.find_chronos()
-    if status != 200:
-      self.logger.error(err)
-      return
-    config.chronos.host, config.chronos.port = body
-
   def _update_config(self, host):
     config.pivot.master = host
     config.exhibitor.host = host
     config.mesos.host = host
     config.marathon.host = host
+    config.chronos.host = host
 
 
 class ClusterAPIManager(APIManager):
@@ -157,17 +150,6 @@ class ClusterAPIManager(APIManager):
                     attributes=h['attributes'])
              for h in body['slaves']]
     return status, agents, None
-
-  async def find_chronos(self):
-    api = config.marathon
-    status, body, err = await self.http_cli.get(api.host, api.port,
-                                                '%s/apps/sys/chronos'%api.endpoint)
-    if status != 200:
-      return status, None ,err
-    tasks = body['app']['tasks']
-    if not tasks or not tasks[0].get('ports', []):
-      return 503, None, 'Chronos is not yet ready'
-    return 200, (tasks[0]['host'], tasks[0]['ports'][0]), None
 
 
 class MasterDBManager(Manager):

@@ -484,7 +484,7 @@ class Container:
         return 400, None, str(e)
     return 400, 'Unknown container type: %s'%data['type'], None
 
-  def __init__(self, id, appliance, type, image, resources, cmd=None, args=[], env={},
+  def __init__(self, id, appliance, type, image, resources, instances=1, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
                dependencies=[], last_update=None, user_schedule_hints=None, sys_schedule_hints=None,
@@ -494,6 +494,7 @@ class Container:
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
     self.__image = image
     self.__resources = Resources(**resources)
+    self.__instances = instances
     self.__cmd = cmd and str(cmd)
     self.__args = [a and str(a) for a in args]
     if self.__cmd and self.__args:
@@ -597,6 +598,20 @@ class Container:
 
     """
     return self.__resources
+
+  @property
+  @swagger.property
+  def instances(self):
+    """
+    Number of instances created for the container
+    ---
+    type: int
+    required: true
+    default: 1
+    example: 1
+
+    """
+    return self.__instances
 
   @property
   @swagger.property
@@ -856,7 +871,9 @@ class Container:
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value,
-                image=self.image, resources=self.resources.to_render(),
+                image=self.image,
+                resources=self.resources.to_render(),
+                instances=self.instances,
                 endpoints=[e.to_render() for e in self.endpoints],
                 state=self.state.value,
                 dependencies=self.dependencies,
@@ -868,7 +885,9 @@ class Container:
     return dict(id=self.id,
                 appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value,
-                image=self.image, resources=self.resources.to_save(),
+                image=self.image,
+                resources=self.resources.to_save(),
+                instances=self.instances,
                 cmd=self.cmd, args=self.args, env=self.env,
                 volumes=[v.to_save() for v in self.volumes],
                 network_mode=self.network_mode.value,
