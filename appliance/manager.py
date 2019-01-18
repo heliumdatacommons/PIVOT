@@ -6,41 +6,42 @@ import volume
 from tornado.gen import multi
 
 from config import config
-from commons import MongoClient, AutonomousMonitor
-from commons import Manager, APIManager
+from commons import MongoClient, AutonomousMonitor, Manager, APIManager
 from appliance import Appliance
 from container.manager import ContainerManager
 from volume.manager import VolumeManager
-from schedule.local import ApplianceScheduleExecutor
+from schedule.universal import GlobalSchedulerRunner
+from schedule.local import ApplianceSchedulerRunner
 
 
 class ApplianceManager(Manager):
 
   def __init__(self):
     self.__app_api = ApplianceAPIManager()
-    self.__contr_mgr = ContainerManager()
     self.__app_db = ApplianceDBManager()
+    self.__contr_mgr = ContainerManager()
     self.__vol_mgr = VolumeManager()
+    self.__global_sched = GlobalSchedulerRunner()
 
   async def get_appliance(self, app_id):
-    status, app, err = await self.__app_db.get_appliance(app_id)
+    db, contr_mgr, vol_mgr = self.__app_db, self.__contr_mgr, self.__vol_mgr
+    status, app, err = await db.get_appliance(app_id)
     if status != 200:
       return status, app, err
     app = Appliance(**app)
-    status, app.containers, err = await self.__contr_mgr.get_containers(appliance=app_id)
+    status, app.containers, err = await contr_mgr.get_containers(appliance=app_id)
     if app.data_persistence:
-      _, local_vols, _ = await self.__vol_mgr.get_local_volumes(appliance=app_id)
-      _, global_vols, _ = await self.__vol_mgr.get_global_volumes_by_appliance(app_id)
+      _, local_vols, _ = await  vol_mgr.get_local_volumes(appliance=app_id)
+      _, global_vols, _ = await vol_mgr.get_global_volumes_by_appliance(app_id)
       app.data_persistence.volumes = local_vols + global_vols
     if len(app.containers) == 0 \
         and (not app.data_persistence or len(app.data_persistence.volumes) == 0):
-      await self.__app_db.delete_appliance(app_id)
+      await db.delete_appliance(app_id)
       return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
   async def create_appliance(self, data):
-
-    vol_mgr = self.__vol_mgr
+    db, vol_mgr, contr_mgr = self.__app_db, self.__vol_mgr, self.__contr_mgr
 
     def validate_volume_mounts(app, vols_existed, vols_declared):
       all_vols = set(vols_existed) | set(vols_declared)
@@ -62,6 +63,7 @@ class ApplianceManager(Manager):
           if pv.src in vols:
             pv.scope = vols[pv.src].scope
 
+    # validation
     status, app, _ = await self.get_appliance(data['id'])
     if status == 200 and len(app.containers) > 0:
       return 409, None, "Appliance '%s' already exists"%data['id']
@@ -97,13 +99,15 @@ class ApplianceManager(Manager):
       set_container_volume_scope(app.containers, dp.volumes)
 
     # create containers
-    resps = await multi([self.__contr_mgr.create_container(c.to_save()) for c in app.containers])
+    resps = await multi([contr_mgr.create_container(c.to_save()) for c in app.containers])
     for status, _, err in resps:
       if status != 201:
         self.logger.error(err)
         await self._clean_up_incomplete_appliance(app.id)
         return status, None, err
-
+    for c in app.containers:
+      c.appliance = app
+    await multi([contr_mgr.save_container(c, upsert=True)] for c in app.containers)
     status, _, err = await self.save_appliance(app)
     if status != 200:
       self.logger.error(err)
@@ -111,25 +115,26 @@ class ApplianceManager(Manager):
       return status, None, err
     scheduler = self._get_scheduler(app.scheduler)
     self.logger.info('Appliance %s uses %s'%(app.id, scheduler.__class__.__name__))
-    ApplianceScheduleExecutor(app.id, scheduler).start()
+    global_sched = self.__global_sched
+    app_scheduler = ApplianceSchedulerRunner(app, scheduler)
+    global_sched.register(app.id, app_scheduler)
+    app_scheduler.start()
     return 201, app, None
 
   async def delete_appliance(self, app_id, purge_data=False):
-    vol_mgr = self.__vol_mgr
-    self.logger.debug('Purge data?: %s' % purge_data)
+    contr_mgr, vol_mgr = self.__contr_mgr, self.__vol_mgr
+    self.logger.debug('Purge data?: %s'%purge_data)
     status, app, err = await self.get_appliance(app_id)
     if status != 200:
       self.logger.error(err)
       return status, None, err
     self.logger.info("Stop monitoring appliance '%s'"%app_id)
-
     # deprovision containers
-    status, msg, err = await self.__contr_mgr.delete_containers(appliance=app_id)
+    status, msg, err = await contr_mgr.delete_containers(appliance=app_id)
     if status != 200:
       self.logger.error(err)
-      return 207, None, "Failed to deprovision jobs of appliance '%s'"%app_id
+      return 207, None, "Failed to delete containers of appliance '%s'"%app_id
     self.logger.info(msg)
-
     # deprovision/delete local persistent volumes if any
     if app.data_persistence:
       _, local_vols, _ = await vol_mgr.get_local_volumes(appliance=app_id)
@@ -147,15 +152,8 @@ class ApplianceManager(Manager):
         for status, _, err in (await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])):
           if status != 200:
             self.logger.error(err)
-
-    # deprovision appliance
-    status, msg, err = await self.__app_api.deprovision_appliance(app_id)
-    if status != 200 and status != 404:
-      self.logger.error(err)
-      return 207, None, "Failed to deprovision appliance '%s'"%app_id
     if purge_data:
-      await self.__app_db.delete_appliance(app_id)
-    ApplianceDeletionChecker(app_id).start()
+      ApplianceDeletionEnforcer(app_id).start()
     return status, msg, None
 
   async def save_appliance(self, app, upsert=True):
@@ -180,12 +178,16 @@ class ApplianceAPIManager(APIManager):
   def __init__(self):
     super(ApplianceAPIManager, self).__init__()
 
-  async def get_appliance(self, app_id):
-    api = config.marathon
-    endpoint = '%s/groups/%s'%(api.endpoint, app_id)
-    return await self.http_cli.get(api.host, api.port, endpoint)
+  async def get_deployments(self, app_id):
+    api, endpoint = config.marathon, '%s/deployments'%config.marathon.endpoint
+    status, deployments, err = await self.http_cli.get(api.host, api.port, endpoint)
+    if status != 200:
+      return status, None, err
+    deployments = [d for d in deployments for affected in d['affectedApps']
+                   if affected.startswith('/%s'%app_id)]
+    return 200, deployments, None
 
-  async def deprovision_appliance(self, app_id):
+  async def delete_appliance(self, app_id):
     api = config.marathon
     endpoint = '%s/groups/%s?force=true'%(api.endpoint, app_id)
     status, msg, err = await self.http_cli.delete(api.host, api.port, endpoint)
@@ -217,26 +219,22 @@ class ApplianceDBManager(Manager):
     return 200, "Appliance '%s' has been deleted"%app_id, None
 
 
-class ApplianceDeletionChecker(AutonomousMonitor):
+class ApplianceDeletionEnforcer(AutonomousMonitor):
 
   def __init__(self, app_id):
-    super(ApplianceDeletionChecker, self).__init__(3000)
+    super(ApplianceDeletionEnforcer, self).__init__(3000)
     self.__app_id = app_id
     self.__app_api = ApplianceAPIManager()
     self.__app_db = ApplianceDBManager()
-    self.__contr_mgr = ContainerManager()
 
   async def callback(self):
-    status, _, err = await self.__app_api.get_appliance(self.__app_id)
-    if status == 200:
-      self.logger.info("Appliance '%s' still exists, deleting"%self.__app_id)
-      await self.__app_api.deprovision_appliance(self.__app_id)
-      return
-    _, contrs, _ = await self.__contr_mgr.get_containers(appliance=self.__app_id)
-    if contrs:
-      self.logger.info("Found obsolete container(s) of appliance '%s', deleting"%self.__app_id)
-      await self.__contr_mgr.delete_containers(appliance=self.__app_id)
-      return
+    app_id, api, db = self.__app_id, self.__app_api, self.__app_db
+    status, deployments, err = await api.get_deployments(app_id)
     if status != 200:
       self.logger.error(err)
-    self.stop()
+      return
+    if len(deployments) > 0:
+      self.logger.debug("Deprovisioning '%s' (%d left)"%(app_id, len(deployments)))
+      return
+    self.logger.debug("Deleting '%s'"%app_id)
+    await multi([api.delete_appliance(app_id), db.delete_appliance(app_id)])

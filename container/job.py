@@ -25,8 +25,6 @@ class Job(Container):
     super(Job, self).__init__(resources=resources, network_mode=network_mode, *args, **kwargs)
     if self.resources.gpu > 0:
       raise ValueError('GPU is not yet supported for jobs')
-    if self.network_mode == NetworkMode.CONTAINER:
-      raise ValueError('CONTAINER mode is not supported for jobs')
     self.__retries = retries
     self.__repeats = repeats
     self.__start_time = start_time
@@ -147,7 +145,7 @@ class Job(Container):
     if self.cmd:
       r['command'] = ' '.join([parse_container_short_id(p, self.appliance)
                                for p in self.cmd.split()])
-    preemptible, placement = self.sys_schedule_hints.preemptible, self.sys_schedule_hints.placement
+    preemptible, placement = self.schedule_hints.preemptible, self.schedule_hints.placement
     r.setdefault('constraints', []).append(['preemptible', 'EQUALS', str(preemptible).lower()])
     if placement.host:
       r.setdefault('constraints', []).append(['hostname', 'EQUALS', str(placement.host)])

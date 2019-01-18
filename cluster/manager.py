@@ -1,29 +1,33 @@
-import datetime
+import datetime as dt
 
-from tornado.gen import multi
 
 from config import config
 from cluster import Master, Agent, AgentResources
-from commons import MongoClient, AutonomousMonitor
+from commons import AutonomousMonitor
 from commons import APIManager, Manager
 
 
 class ClusterManager(Manager):
 
   def __init__(self, monitor_interval=30000):
-    cluster_api, agent_db = ClusterAPIManager(), AgentDBManager()
-    self.__cluster_api, self.__agent_db = cluster_api, agent_db
+    self.__cluster_api = ClusterAPIManager()
     self.__cluster_monitor = ClusterMonitor(monitor_interval)
 
-  async def get_cluster(self, ttl=30):
-    if self._is_cache_expired(ttl):
-      await self.__cluster_monitor.update()
-    return await self.__agent_db.get_all_agents()
+  async def update(self):
+    await self.__cluster_monitor.update()
 
-  async def find_agents(self, ttl=30, **kwargs):
+  async def get_agents(self, ttl=30):
+    cluster_mon = self.__cluster_monitor
     if self._is_cache_expired(ttl):
-      await self.__cluster_monitor.update()
-    return await self.__agent_db.find_agents(**kwargs)
+      await cluster_mon.update()
+    return list(cluster_mon.agents.values())
+
+  async def get_agent(self, agent_id, ttl=30):
+    assert isinstance(agent_id, str)
+    cluster_mon = self.__cluster_monitor
+    if self._is_cache_expired(ttl):
+      await cluster_mon.update()
+    return cluster_mon.agents.get(agent_id)
 
   def start_monitor(self):
     self.__cluster_monitor.start()
@@ -33,8 +37,8 @@ class ClusterManager(Manager):
       return False
     if not self.__cluster_monitor.last_update:
       return True
-    ttl = datetime.timedelta(seconds=ttl)
-    return datetime.datetime.now(tz=None) - self.__cluster_monitor.last_update > ttl
+    ttl = dt.timedelta(seconds=ttl)
+    return dt.datetime.now(tz=None) - self.__cluster_monitor.last_update > ttl
 
 
 class ClusterMonitor(AutonomousMonitor):
@@ -42,10 +46,13 @@ class ClusterMonitor(AutonomousMonitor):
   def __init__(self, interval=30000):
     super(ClusterMonitor, self).__init__(interval)
     self.__api = ClusterAPIManager()
-    self.__master_db = MasterDBManager()
-    self.__agent_db = AgentDBManager()
-    self.__last_update = None
     self._update_config(config.pivot.master)
+    self.__agents = {}
+    self.__last_update = None
+
+  @property
+  def agents(self):
+    return dict(self.__agents)
 
   @property
   def last_update(self):
@@ -54,14 +61,10 @@ class ClusterMonitor(AutonomousMonitor):
   async def update(self):
     status, agents, err = await self.__api.get_agents()
     if status == 200:
-      agents_in_db = set(a.id for a in (await self.__agent_db.get_all_agents()))
-      for a in agents:
-        agents_in_db.remove(a.id)
-        await self.__agent_db.update_agent(a)
-      await multi([self.__agent_db.remove_agent(aid) for aid in agents_in_db])
+      self.__agents.update({a.id: a for a in agents})
+      self.__last_update = dt.datetime.now()
     else:
-      self.logger.info('Failed to query agents')
-    self.__last_update = datetime.datetime.now(tz=None)
+      self.logger.error('Failed to query Mesos agents: %s'%err)
 
   async def callback(self):
     await self.update()
@@ -73,11 +76,6 @@ class ClusterMonitor(AutonomousMonitor):
     status, leader, err = await self.__api.get_leader()
     if status == 200:
       return leader
-    for m in await self.__master_db.get_masters():
-      config.exhibitor.host = m.hostname
-      status, leader, err = await self.__api.get_leader()
-      if status == 200:
-        return leader
     raise Exception('Cannot find leader. Probably all the registered masters are down')
 
   def _update_config(self, host):
@@ -139,7 +137,6 @@ class ClusterAPIManager(APIManager):
                - h['used_resources'].get(type, 0)
                - h['offered_resources'].get(type, 0)
                - h['reserved_resources'].get(type, 0))
-
     agents = [Agent(id=h['id'],
                     hostname=h['hostname'],
                     resources=AgentResources(calc_available_resource(h, 'cpus'),
@@ -147,48 +144,10 @@ class ClusterAPIManager(APIManager):
                                              calc_available_resource(h, 'disk'),
                                              calc_available_resource(h, 'gpus'),
                                              calc_available_resource(h, 'ports')),
-                    attributes=h['attributes'])
+                    public_ip=h['attributes']['public_ip'],
+                    cloud=h['attributes']['cloud'],
+                    region=h['attributes']['region'],
+                    zone=h['attributes']['zone'],
+                    preemptible=bool(h['attributes']['preemptible']))
              for h in body['slaves']]
     return status, agents, None
-
-
-class MasterDBManager(Manager):
-
-  def __init__(self):
-    self.__master_col = MongoClient()[config.db.name].master
-
-  async def get_masters(self):
-    return [Master(**m) async for m in self.__master_col.find()]
-
-  async def get_leader_master(self):
-    leaders = [Master(**m) async for m in self.__master_col.find(is_leader=True)]
-    return leaders and leaders[0]
-
-  async def update_master(self, master):
-    await self.__master_col.replace_one(dict(hostname=master.hostname),
-                                        master.to_save(), upsert=True)
-
-
-class AgentDBManager(Manager):
-
-  def __init__(self):
-    self.__agent_col = MongoClient()[config.db.name].agent
-
-  async def get_all_agents(self):
-    return [Agent(**a, resources=AgentResources(**a.pop('resources', None)))
-            async for a in self.__agent_col.find()]
-
-  async def find_agents(self, **kwargs):
-    cond = {k if k in ('id', 'hostname') else 'attributes.%s'%k:
-            {'$in': v} if isinstance(v, list) else v
-            for k, v in kwargs.items()}
-    return [Agent(**a, resources=AgentResources(**a.pop('resources', None)))
-            async for a in self.__agent_col.find(cond)]
-
-  async def update_agent(self, agent):
-    await self.__agent_col.replace_one(dict(hostname=agent.hostname), agent.to_save(),
-                                       upsert=True)
-
-  async def remove_agent(self, agent_id):
-    await self.__agent_col.delete_one(dict(id=agent_id))
-

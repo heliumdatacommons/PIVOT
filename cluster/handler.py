@@ -45,5 +45,5 @@ class ClusterInfoHandler(RequestHandler, Loggable):
       agents = await self.__cluster_mgr.find_agents(**args)
       self.write(json.dumps([h.to_render() for h in agents]))
     else:
-      agents = await self.__cluster_mgr.get_cluster()
+      agents = await self.__cluster_mgr.get_agents()
       self.write(json.dumps([h.to_render() for h in agents]))

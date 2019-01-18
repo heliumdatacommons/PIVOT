@@ -1,6 +1,6 @@
 import swagger
 
-from container import Container, NetworkMode, ContainerVolumeType, parse_container_short_id
+from container import Container, NetworkMode, parse_container_short_id
 from volume import VolumeScope
 
 
@@ -160,12 +160,9 @@ class Service(Container):
 
   """
 
-  def __init__(self, health_check=None, default_health_check=False,
-               minimum_capacity=0, *args, **kwargs):
+  def __init__(self, health_check=None, *args, **kwargs):
     super(Service, self).__init__(*args, **kwargs)
     self.__health_check = health_check and HealthCheck(**health_check)
-    self.__default_health_check = default_health_check
-    self.__minimum_capacity = minimum_capacity
 
   @property
   @swagger.property
@@ -180,50 +177,17 @@ class Service(Container):
     """
     return self.__health_check
 
-  @property
-  @swagger.property
-  def default_health_check(self):
-    """
-    Whether to perform default health check on the service
-    ---
-    type: bool
-    default: true
-    example: true
-
-    """
-    return self.__default_health_check
-
-  @property
-  @swagger.property
-  def minimum_capacity(self):
-    """
-    The minimum percentage of service instances that must stay `healthy` in order to mark
-    the service as `healthy`
-    ---
-    type: float
-    minimum: 0.0
-    default: 0.0
-    example: 1.0
-
-    """
-    return self.__minimum_capacity
-
   @health_check.setter
   def health_check(self, hc):
     self.__health_check = hc and HealthCheck(**hc)
 
   def to_render(self):
     return dict(**super(Service, self).to_render(),
-                health_check=self.health_check.to_render() if self.health_check else None,
-                default_health_check=self.default_health_check,
-                minimum_capacity=self.minimum_capacity)
+                health_check=self.health_check.to_render() if self.health_check else None)
 
   def to_save(self):
-    self._add_default_health_check()
     return dict(**super(Service, self).to_save(),
-                health_check=self.health_check.to_save() if self.health_check else None,
-                default_health_check=self.default_health_check,
-                minimum_capacity=self.minimum_capacity)
+                health_check=self.health_check.to_save() if self.health_check else None)
 
   def to_request(self):
 
@@ -261,7 +225,6 @@ class Service(Container):
         health_check['command']['value'] = parse_container_short_id(health_check['command']['value'],
                                                                     self.appliance)
 
-    self._add_default_health_check()
     params = get_default_parameters() + get_persistent_volumes()
     r = dict(id=str(self),
              **self.resources.to_request(),
@@ -275,10 +238,7 @@ class Service(Container):
                                         privileged=self.is_privileged,
                                         forcePullImage=self.force_pull_image,
                                         parameters=params)),
-             healthChecks=[health_check] if self.health_check else [],
-             upgradeStrategy=dict(
-               minimumHealthCapacity=self.minimum_capacity,
-               maximumOverCapacity=1.))
+             healthChecks=[health_check] if self.health_check else [])
     if self.cmd:
       r['cmd'] = ' '.join([parse_container_short_id(p, self.appliance)
                            for p in self.cmd.split()])
@@ -301,7 +261,7 @@ class Service(Container):
                             containerPort=p.container_port)
                        for i, p in enumerate(self.ports)]
       r['container']['docker']['portMappings'] = port_mappings
-    preemptible, placement = self.sys_schedule_hints.preemptible, self.sys_schedule_hints.placement
+    preemptible, placement = self.schedule_hints.preemptible, self.schedule_hints.placement
     r.setdefault('constraints', []).append(['preemptible', 'CLUSTER', str(preemptible).lower()])
     if placement.host:
       r.setdefault('constraints', []).append(['hostname', 'CLUSTER', str(placement.host)])
@@ -312,14 +272,6 @@ class Service(Container):
     elif placement.cloud:
       r.setdefault('constraints', []).append(['cloud', 'CLUSTER', str(placement.cloud)])
     return r
-
-  def _add_default_health_check(self):
-    if not self.health_check and self.default_health_check:
-      for i, p in enumerate(self.ports):
-        if p.protocol != 'tcp':
-          continue
-        self.health_check = HealthCheck(port_index=i)
-        break
 
   def __str__(self):
     return '/%s/%s'%(self.appliance, self.id)

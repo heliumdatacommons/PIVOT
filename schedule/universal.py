@@ -1,99 +1,57 @@
-import container.manager
-import cluster.manager
 import volume.manager
 
 from tornado.gen import multi
 
 from schedule import SchedulePlan
-from commons import AutonomousMonitor, Singleton, Loggable
+from schedule.task import Task, ServiceTask, JobTask
+from schedule.manager import ServiceTaskManager, JobTaskManager
+from schedule.local import ApplianceSchedulerRunner
+from commons import Singleton, Loggable
 
 
-class GlobalScheduler(Loggable, metaclass=Singleton):
+class GlobalSchedulerRunner(Loggable, metaclass=Singleton):
 
-  async def schedule(self, sched, agents):
-    """
-
-    :param sched: schedule.SchedulePlan
-    :param agents: cluster.Agent
-    :return: schedule.SchedulePlan
-    """
-    raise NotImplemented
-
-  async def reschedule(self, contrs, agents):
-    raise NotImplemented
-
-
-class GlobalScheduleExecutor(Loggable, metaclass=Singleton):
-
-  def __init__(self, scheduler, interval=30000):
-    super(GlobalScheduleExecutor, self).__init__()
-    self.__scheduler = scheduler
-    self.__contr_mgr = container.manager.ContainerManager()
-    self.__cluster_mgr = cluster.manager.ClusterManager()
+  def __init__(self):
+    super(GlobalSchedulerRunner, self).__init__()
+    self.__srv_mgr = ServiceTaskManager()
+    self.__job_mgr = JobTaskManager()
     self.__vol_mgr = volume.manager.VolumeManager()
-    self.__resched_runner = RescheduleRunner(scheduler, self, interval)
+    self.__schedulers = {}
 
-  def start_rescheduler(self):
-    self.__resched_runner.start()
+  def get_appliance_scheduler(self, app_id):
+    return self.__schedulers.get(app_id)
 
-  async def submit(self, sched):
+  def register(self, app_id, app_scheduler):
+    assert isinstance(app_id, str)
+    assert isinstance(app_scheduler, ApplianceSchedulerRunner)
+    self.__schedulers[app_id] = app_scheduler
+
+  def deregister(self, app_id):
+    self.__schedulers.pop(app_id, None)
+
+  async def submit(self, plan):
     """
 
-    :param sched: schedule.SchedulePlan
+    :param plan: schedule.base.SchedulePlan
 
     """
-    assert isinstance(sched, SchedulePlan)
+    assert isinstance(plan, SchedulePlan)
+    await multi([self._provision_volume(v) for v in plan.volumes])
+    await multi([self._provision_task(t) for t in plan.tasks])
 
-    agents = await self.get_agents()
-    plan = await self.__scheduler.schedule(sched, list(agents))
-    await multi([self.provision_volume(v) for v in plan.volumes])
-    await multi([self.provision_container(c) for c in plan.containers])
+  async def _provision_task(self, task):
+    assert isinstance(task, Task)
+    srv_mgr, job_mgr = self.__srv_mgr, self.__job_mgr
+    if isinstance(task, ServiceTask):
+      await srv_mgr.launch_service_task(task)
+    elif isinstance(task, JobTask):
+      await job_mgr.launch_job_task(task)
 
-  async def get_agents(self):
-    return await self.__cluster_mgr.get_cluster(0)
-
-  async def get_containers(self, **kwargs):
-    status, contrs, err = await self.__contr_mgr.get_containers(**kwargs, full_blown=True)
-    if status != 200:
-      self.logger.error(err)
-    return contrs
-
-  async def provision_volume(self, vol):
+  async def _provision_volume(self, vol):
     self.logger.info("Volume '%s' is being provisioned"%vol.id)
     status, _, err = await self.__vol_mgr.provision_volume(vol)
     if status != 200:
       self.logger.error(err)
 
-  async def provision_container(self, contr):
-    self.logger.info("Container '%s' is being provisioned"%contr.id)
-    await self.__contr_mgr.save_container(contr)
-    status, contr, err = await self.__contr_mgr.get_container(contr.appliance, contr.id,
-                                                              full_blown=True)
-    status, contr, err = await self.__contr_mgr.provision_container(contr)
-    if err:
-      self.logger.error(err)
 
 
-class RescheduleRunner(AutonomousMonitor):
-
-  def __init__(self, scheduler, executor, interval=30000):
-    super(RescheduleRunner, self).__init__(interval)
-    self.logger.info('Global scheduler: %s'%scheduler.__class__.__name__)
-    self.__scheduler = scheduler
-    self.__executor = executor
-
-  async def callback(self):
-    agents = await self.__executor.get_agents()
-    contrs = await self.__executor.get_containers()
-    if not contrs: return
-    plan = await self.__scheduler.reschedule(contrs, agents)
-    await multi([self.__executor.provision_container(c) for c in plan.containers])
-
-
-class DefaultGlobalScheduler(GlobalScheduler):
-
-  async def schedule(self, sched, agents):
-    return sched
-
-  async def reschedule(self, contrs, agents):
-    return SchedulePlan()

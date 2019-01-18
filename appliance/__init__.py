@@ -47,7 +47,7 @@ class Appliance:
       if from_user:
         for unwanted_f in ('appliance', ):
           c.pop(unwanted_f, None)
-      status, contr, err = Container.parse(dict(**c, appliance=data['id']), from_user)
+      status, contr, err = Container.parse(c, from_user)
       if status != 200:
         return status, None, err
       containers.append(contr)
@@ -136,10 +136,6 @@ class Appliance:
     return self.__data_persistence
 
   @property
-  def volumes(self):
-    return self.__data_persistence.volumes if self.__data_persistence else []
-
-  @property
   @swagger.property
   def scheduler(self):
     """
@@ -151,8 +147,13 @@ class Appliance:
     """
     return self.__scheduler
 
+  @property
+  def volumes(self):
+    return self.__data_persistence.volumes if self.__data_persistence else []
+
   @containers.setter
   def containers(self, contrs):
+    assert all([isinstance(c, Container) for c in contrs])
     self.__containers = list(contrs)
 
   def to_render(self):

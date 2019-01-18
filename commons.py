@@ -30,7 +30,7 @@ class Loggable(object):
     fmt = logging.Formatter('%(asctime)s|%(levelname)s|%(process)d|%(name)s.%(funcName)s'
                             '::%(lineno)s\t%(message)s')
     logger = logging.getLogger(self.__class__.__name__)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     if not logger.handlers:
       stream_hdlr = logging.StreamHandler(sys.stdout)
       stream_hdlr.setFormatter(fmt)

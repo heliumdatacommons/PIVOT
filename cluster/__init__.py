@@ -2,6 +2,8 @@ import bisect
 
 import swagger
 
+from locality import Placement
+
 
 @swagger.model
 class Master:
@@ -54,11 +56,21 @@ class Agent:
 
   """
 
-  def __init__(self, id, hostname, resources, attributes={}, *args, **kwargs):
+  def __init__(self, id, hostname, resources, public_ip,
+               cloud, region, zone, preemptible, fqdn=None, *args, **kwargs):
+    assert isinstance(id, str)
     self.__id = id
+    assert isinstance(hostname, str)
     self.__hostname = hostname
+    assert isinstance(resources, AgentResources)
     self.__resources = resources
-    self.__attributes = dict(attributes)
+    assert isinstance(public_ip, str)
+    self.__public_ip = public_ip
+    self.__locality = Placement(cloud, region, zone, hostname)
+    assert isinstance(preemptible, bool)
+    self.__preemptible = preemptible
+    assert fqdn is None or isinstance(fqdn, str)
+    self.__fqdn = fqdn
 
   @property
   @swagger.property
@@ -101,26 +113,59 @@ class Agent:
 
   @property
   @swagger.property
-  def attributes(self):
+  def public_ip(self):
     """
-    Key-value attribute pairs associated with the agent
+    Public IP address
 
     ---
-    type: dict
+    type: str
     read_only: true
-    additional_properties:
-      type: str
-    example:
-      region: us-east1
     """
-    return dict(self.__attributes)
+    return self.__public_ip
+
+  @property
+  @swagger.property
+  def locality(self):
+    """
+    Agent locality
+
+    ---
+    type: Placement
+    read_only: true
+    """
+    return self.__locality.clone()
+
+  @property
+  @swagger.property
+  def preemptible(self):
+    """
+    Agent preemptibility
+
+    ---
+    type: bool
+    read_only: true
+    """
+    return self.__preemptible
+
+  @property
+  @swagger.property
+  def fqdn(self):
+    """
+    Fully qualified domain name
+    ---
+    type: str
+    read_only: true
+    """
+    return self.__fqdn
 
   def to_render(self):
-    return dict(id=self.id, hostname=self.hostname,
-                attributes=self.attributes, resources=self.resources.to_render())
-
-  def to_save(self):
-    return self.to_render()
+    return dict(id=self.id,
+                hostname=self.hostname,
+                resources=self.resources.to_render(),
+                public_ip=self.public_ip,
+                locality=self.locality.to_render(),
+                preemptible=self.preemptible,
+                fqdn=self.fqdn)
 
 
 @swagger.model
@@ -222,9 +267,6 @@ class AgentResources:
   def to_render(self):
     return dict(cpus=self.cpus, mem=self.mem, disk=self.disk, gpus=self.gpus,
                 port_ranges=['%d-%d'%(ps, pe) for ps, pe in self.port_ranges])
-
-  def to_save(self):
-    return self.to_render()
 
 
 

@@ -15,18 +15,12 @@ from cluster.manager import ClusterManager
 from index.handler import IndexHandler
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
-from config import config, get_global_scheduler
-from schedule.universal import GlobalScheduleExecutor
+from config import config
 from util import dirname
 
 
 def start_cluster_monitor():
   tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
-
-
-def start_global_scheduler():
-  scheduler = GlobalScheduleExecutor(get_global_scheduler())
-  tornado.ioloop.IOLoop.instance().add_callback(scheduler.start_rescheduler)
 
 
 def start_server():
@@ -57,7 +51,6 @@ def start_server():
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
   start_cluster_monitor()
-  start_global_scheduler()
   tornado.ioloop.IOLoop.instance().start()
 
 

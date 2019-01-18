@@ -92,6 +92,9 @@ class Placement:
   def host(self, host):
     self.__host = host
 
+  def clone(self):
+    return Placement(self.cloud, self.region, self.zone, self.host)
+
   def to_render(self):
     return dict(cloud=self.cloud, region=self.region, zone=self.zone, host=self.host)
 

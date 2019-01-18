@@ -80,7 +80,6 @@ class JobsHandler(RequestHandler, Loggable):
     self.set_status(status)
     self.write(json_encode([s.to_render() for s in services] if status == 200 else error(err)))
 
-
 class ContainersHandler(RequestHandler, Loggable):
 
   def initialize(self):

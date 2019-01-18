@@ -8,9 +8,6 @@ import schedule
 
 from enum import Enum
 
-from util import parse_datetime
-from locality import Placement
-
 
 @swagger.enum
 class ContainerType(Enum):
@@ -21,46 +18,6 @@ class ContainerType(Enum):
 
   SERVICE = 'service'
   JOB = 'job'
-
-
-@swagger.enum
-class ContainerState(Enum):
-  """
-  Container state
-
-  """
-  SUBMITTED = 'submitted'
-  PENDING = 'pending'
-  STAGING = 'staging'
-  RUNNING = 'running'
-  SUCCESS = 'success'
-  FAILED = 'failed'
-  KILLED = 'killed'
-
-  @classmethod
-  def has_value(cls, val):
-    return any(val == item.value for item in cls)
-
-  @classmethod
-  def determine_state(cls, states, minimum_capacity=1.):
-    """
-
-    :param states: MESOS states
-    :param minimum_capacity:
-    :return:
-    """
-    if not states:
-      return ContainerState.SUBMITTED
-    running_tasks = sum([1 for s in states if s == 'TASK_RUNNING'])
-    staging_tasks = sum([1 for s in states if s == 'TASK_STAGING'])
-    starting_tasks = sum([1 for s in states if s == 'TASK_STARTING'])
-    if staging_tasks:
-      return ContainerState.STAGING
-    if starting_tasks:
-      return ContainerState.PENDING
-    if running_tasks/len(states) >= minimum_capacity:
-      return ContainerState.RUNNING
-    return ContainerState.FAILED
 
 
 @swagger.enum
@@ -243,6 +200,16 @@ class Endpoint:
 
   def to_save(self):
     return self.to_render()
+
+  def __hash__(self):
+    return hash((self.host, self.host_port, self.container_port, self.protocol, self.name))
+
+  def __eq__(self, other):
+    return isinstance(other, Endpoint) \
+           and self.host == other.host \
+           and self.host_port == other.host_port \
+           and self.container_port == other.container_port \
+           and self.name == other.name
 
   def __repr__(self):
     return str(self.to_render())
@@ -459,20 +426,9 @@ class Container:
     if from_user:
       for unwanted_f in ('deployment', ):
         data.pop(unwanted_f, None)
-    if from_user:
-      sched_hints = data.get('schedule_hints')
-      if sched_hints:
-        status, sched_hints, err = ContainerScheduleHints.parse(sched_hints, from_user)
-        if status != 200:
-          return status, None, err
-        data['user_schedule_hints'] = sched_hints
-    else:
-      user_sched_hints = data.get('user_schedule_hints')
-      sys_sched_hints = data.get('sys_schedule_hints')
-      if user_sched_hints:
-        _, data['user_schedule_hints'], _ = ContainerScheduleHints.parse(user_sched_hints, from_user)
-      if sys_sched_hints:
-        _, data['sys_schedule_hints'], _ = ContainerScheduleHints.parse(sys_sched_hints, from_user)
+    sched_hints = data.get('schedule_hints')
+    if sched_hints:
+      _, data['schedule_hints'], _ = ContainerScheduleHints.parse(sched_hints, from_user)
     if data['type'] == ContainerType.SERVICE.value:
       from container.service import Service
       return 200, Service(**data), None
@@ -484,17 +440,17 @@ class Container:
         return 400, None, str(e)
     return 400, 'Unknown container type: %s'%data['type'], None
 
-  def __init__(self, id, appliance, type, image, resources, instances=1, cmd=None, args=[], env={},
+  def __init__(self, id, type, image, resources, instances=1, app=None, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
-               state=ContainerState.SUBMITTED, is_privileged=False, force_pull_image=True,
-               dependencies=[], last_update=None, user_schedule_hints=None, sys_schedule_hints=None,
-               deployment=None, *aargs, **kwargs):
+               is_privileged=False, force_pull_image=True, dependencies=[], schedule_hints=None,
+               tasks=[], *aargs, **kwargs):
     self.__id = id
-    self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
     self.__image = image
     self.__resources = Resources(**resources)
     self.__instances = instances
+    assert app is None or isinstance(app, appliance.Appliance)
+    self.__appliance = app
     self.__cmd = cmd and str(cmd)
     self.__args = [a and str(a) for a in args]
     if self.__cmd and self.__args:
@@ -505,33 +461,20 @@ class Container:
                           else NetworkMode(network_mode.upper())
     self.__endpoints = [Endpoint(**e) for e in endpoints]
     self.__ports = [Port(**p) for p in ports]
-    self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = list(dependencies)
 
-    if isinstance(user_schedule_hints, dict):
-      self.__user_schedule_hints = ContainerScheduleHints(**user_schedule_hints)
-    elif isinstance(user_schedule_hints, ContainerScheduleHints):
-      self.__user_schedule_hints = user_schedule_hints
+    if isinstance(schedule_hints, dict):
+      self.__schedule_hints = ContainerScheduleHints(**schedule_hints)
+    elif isinstance(schedule_hints, ContainerScheduleHints):
+      self.__schedule_hints = schedule_hints
     else:
-      self.__user_schedule_hints = ContainerScheduleHints()
-
-    if isinstance(sys_schedule_hints, dict):
-      self.__sys_schedule_hints = ContainerScheduleHints(**sys_schedule_hints)
-    elif isinstance(sys_schedule_hints, ContainerScheduleHints):
-      self.__sys_schedule_hints = sys_schedule_hints
-    else:
-      self.__sys_schedule_hints = ContainerScheduleHints()
-
-    if isinstance(deployment, dict):
-      self.__deployment = ContainerDeployment(**deployment)
-    elif isinstance(deployment, ContainerDeployment):
-      self.__deployment = deployment
-    else:
-      self.__deployment = ContainerDeployment()
-
-    self.__last_update = parse_datetime(last_update)
+      self.__schedule_hints = ContainerScheduleHints()
+    if all([isinstance(t, schedule.task.Task) for t in tasks]):
+      self.__tasks = list(tasks)
+    elif all([isinstance(t, dict) for t in tasks]):
+      self.__tasks = [schedule.task.Task(container=self, **t) for t in tasks]
 
   @property
   @swagger.property
@@ -712,18 +655,6 @@ class Container:
 
   @property
   @swagger.property
-  def state(self):
-    """
-    Container state
-    ---
-    type: ContainerState
-    read_only: true
-
-    """
-    return self.__state
-
-  @property
-  @swagger.property
   def is_privileged(self):
     """
     Whether to run the container in `privileged` mode
@@ -768,41 +699,19 @@ class Container:
 
   @property
   @swagger.property
-  def user_schedule_hints(self):
+  def schedule_hints(self):
     """
-    User-specified container scheduling hints
+    container scheduling hints
     ---
     type: ContainerScheduleHints
 
     """
-    return self.__user_schedule_hints
+    return self.__schedule_hints
 
   @property
   @swagger.property
-  def sys_schedule_hints(self):
-    """
-    System container scheduling hints
-    ---
-    type: ContainerScheduleHints
-
-    """
-    return self.__sys_schedule_hints
-
-  @property
-  @swagger.property
-  def deployment(self):
-    """
-    Container deployment info
-    ---
-    type: ContainerDeployment
-    read_only: true
-
-    """
-    return self.__deployment
-
-  @property
-  def last_update(self):
-    return self.__last_update
+  def tasks(self):
+    return list(self.__tasks)
 
   @property
   def host_volumes(self):
@@ -837,53 +746,40 @@ class Container:
 
   @appliance.setter
   def appliance(self, app):
-    assert isinstance(app, str) or isinstance(app, appliance.Appliance)
+    assert isinstance(app, appliance.Appliance)
     self.__appliance = app
 
   @endpoints.setter
   def endpoints(self, endpoints):
     self.__endpoints = list(endpoints)
 
-  @state.setter
-  def state(self, state):
-    self.__state = state if isinstance(state, ContainerState) else ContainerState(state)
-
-  @sys_schedule_hints.setter
-  def sys_schedule_hints(self, hints):
+  @schedule_hints.setter
+  def schedule_hints(self, hints):
     assert isinstance(hints, ContainerScheduleHints)
-    self.__sys_schedule_hints = hints
-
-  @last_update.setter
-  def last_update(self, last_update):
-    self.__last_update = parse_datetime(last_update)
-
-  @deployment.setter
-  def deployment(self, deployment):
-    self.__deployment = deployment
+    self.__schedule_hints = hints
 
   def add_env(self, **env):
     self.__env.update(env)
 
-  def add_dependency(self, dep):
-    self.__dependencies.append(dep)
+  def add_tasks(self, *tasks):
+    assert all([isinstance(t, schedule.task.Task) for t in tasks])
+    self.__tasks = list(set(self.__tasks + list(tasks)))
 
   def to_render(self):
     return dict(id=self.id,
-                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
+                appliance=self.appliance.id if self.appliance else None,
                 type=self.type.value,
                 image=self.image,
                 resources=self.resources.to_render(),
                 instances=self.instances,
                 endpoints=[e.to_render() for e in self.endpoints],
-                state=self.state.value,
                 dependencies=self.dependencies,
-                user_schedule_hints=self.user_schedule_hints.to_render(),
-                sys_schedule_hints=self.sys_schedule_hints.to_render(),
-                deployment=self.deployment.to_render())
+                schedule_hints=self.schedule_hints.to_render(),
+                tasks=[t.to_render() for t in self.tasks])
 
   def to_save(self):
     return dict(id=self.id,
-                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
+                appliance=self.appliance.id if self.appliance else None,
                 type=self.type.value,
                 image=self.image,
                 resources=self.resources.to_save(),
@@ -893,12 +789,11 @@ class Container:
                 network_mode=self.network_mode.value,
                 endpoints=[e.to_save() for e in self.endpoints],
                 ports=[p.to_save() for p in self.ports],
-                state=self.state.value, is_privileged=self.is_privileged,
-                force_pull_image=self.force_pull_image, dependencies=self.dependencies,
-                last_update=self.last_update and self.last_update.isoformat(),
-                user_schedule_hints=self.user_schedule_hints.to_save(),
-                sys_schedule_hints=self.sys_schedule_hints.to_save(),
-                deployment=self.deployment.to_save())
+                is_privileged=self.is_privileged,
+                force_pull_image=self.force_pull_image,
+                dependencies=self.dependencies,
+                schedule_hints=self.schedule_hints.to_save(),
+                tasks=[t.to_save() for t in self.tasks])
 
   def __hash__(self):
     return hash((self.id, self.appliance))
@@ -912,44 +807,6 @@ class Container:
               or (isinstance(self.appliance, str)
                  and isinstance(other.appliance, str)
                  and self.appliance == other.appliance))
-
-
-@swagger.model
-class ContainerDeployment:
-
-  def __init__(self, ip_addresses=[], placement=None):
-    self.__ip_addresses = list(ip_addresses)
-    if isinstance(placement, dict):
-      self.__placement = Placement(**placement)
-    elif isinstance(placement, Placement):
-      self.__placement = placement
-    else:
-      self.__placement = Placement()
-
-  @property
-  @swagger.property
-  def placement(self):
-    """
-    Physical placement of the container
-    ---
-    type: Placement
-    read_only: true
-
-    """
-    return self.__placement
-
-  @property
-  def ip_addresses(self):
-    return list(self.__ip_addresses)
-
-  def add_ip_address(self, ip_addr):
-    self.__ip_addresses.append(ip_addr)
-
-  def to_render(self):
-    return dict(placement=self.placement.to_render())
-
-  def to_save(self):
-    return dict(ip_addresses=self.ip_addresses, placement=self.placement.to_render())
 
 
 def get_short_ids(p):

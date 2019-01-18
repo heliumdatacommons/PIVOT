@@ -1,6 +1,7 @@
 import swagger
 
-from locality import Placement
+import locality
+import schedule.task
 
 
 @swagger.model
@@ -48,49 +49,16 @@ class Scheduler:
     return dict(name=self.name, config=self.config)
 
 
-class SchedulePlan:
-
-  def __init__(self, done=False, containers=[], volumes=[]):
-    import container, volume
-    assert all([isinstance(c, container.Container) for c in containers])
-    assert all([isinstance(v, volume.PersistentVolume) for v in volumes])
-    self.__done = done
-    self.__containers = list(containers)
-    self.__volumes = list(volumes)
-
-  @property
-  def done(self):
-    return self.__done
-
-  @property
-  def containers(self):
-    return list(self.__containers)
-
-  @property
-  def volumes(self):
-    return list(self.__volumes)
-
-  @done.setter
-  def done(self, done):
-    self.__done = done
-
-  def add_containers(self, contrs):
-    self.__containers += list(contrs)
-
-  def add_volumes(self, vols):
-    self.__volumes += list(vols)
-
-
 @swagger.model
 class ScheduleHints:
 
   def __init__(self, placement=None, *args, **kwargs):
     if isinstance(placement, dict):
-      self.__placement = Placement(**placement)
-    elif isinstance(placement, Placement):
+      self.__placement = locality.Placement(**placement)
+    elif isinstance(placement, locality.Placement):
       self.__placement = placement
     else:
-      self.__placement = Placement()
+      self.__placement = locality.Placement()
 
   @property
   @swagger.property
@@ -105,7 +73,7 @@ class ScheduleHints:
 
   @placement.setter
   def placement(self, placement):
-    assert isinstance(placement, Placement)
+    assert isinstance(placement, locality.Placement)
     self.__placement = placement
 
   def to_render(self):
@@ -114,3 +82,34 @@ class ScheduleHints:
   def to_save(self):
     return dict(placement=self.placement.to_save())
 
+
+class SchedulePlan:
+
+  def __init__(self, tasks=[], volumes=[]):
+    import volume
+    assert all([isinstance(c, schedule.task.Task) for c in tasks])
+    assert all([isinstance(v, volume.PersistentVolume) for v in volumes])
+    self.__tasks = list(tasks)
+    self.__volumes = list(volumes)
+    self.__done = False
+
+  @property
+  def done(self):
+    return self.__done
+
+  @property
+  def tasks(self):
+    return list(self.__tasks)
+
+  @property
+  def volumes(self):
+    return list(self.__volumes)
+
+  def set_done(self):
+    self.__done = True
+
+  def add_tasks(self, *tasks):
+    self.__tasks += tasks
+
+  def add_volumes(self, *vols):
+    self.__volumes += vols

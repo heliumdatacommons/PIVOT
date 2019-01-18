@@ -1,47 +1,81 @@
+import cluster
 import appliance
-import volume
+import container
 
 from abc import ABCMeta
-from itertools import groupby
+from tornado.gen import multi
+from collections import Iterable
 
 from schedule import SchedulePlan
-from schedule.universal import GlobalScheduleExecutor
+from schedule.task import Task, ServiceTask, JobTask, TaskEnsemble, TaskState
+from schedule.manager import GeneralTaskManager, ServiceTaskManager, JobTaskManager
 from commons import AutonomousMonitor, Loggable
-from config import get_global_scheduler
-from locality import Placement
 
 
-class ApplianceScheduleExecutor(AutonomousMonitor):
+class ApplianceSchedulerRunner(AutonomousMonitor):
 
-  def __init__(self, app_id, scheduler, interval=3000):
-    super(ApplianceScheduleExecutor, self).__init__(interval)
-    self.__app_id = app_id
-    self.__app_mgr = appliance.manager.ApplianceManager()
+  def __init__(self, app, scheduler, interval=3000):
+    super(ApplianceSchedulerRunner, self).__init__(interval)
+    assert isinstance(app, appliance.Appliance)
+    self.__app = app
+    assert isinstance(scheduler, ApplianceScheduler)
     self.__local_sched = scheduler
-    self.__global_sched_exec = GlobalScheduleExecutor(get_global_scheduler())
+    self.__app_mgr = appliance.manager.ApplianceManager()
+    self.__contr_mgr = container.manager.ContainerManager()
+    self.__cluster_mgr = cluster.manager.ClusterManager()
+    self.__task_mgr = GeneralTaskManager()
+    self.__srv_mgr = ServiceTaskManager()
+    self.__job_mgr = JobTaskManager()
+    from schedule.universal import GlobalSchedulerRunner
+    self.__global_scheduler = GlobalSchedulerRunner()
+    self.__ensemble = None
+
+  @property
+  def ensemble(self):
+    return self.__ensemble
 
   async def callback(self):
-    # get appliance
-    status, app, err = await self.__app_mgr.get_appliance(self.__app_id)
-    if not app:
-      if status == 404:
-        self.logger.info("Appliance '%s' no longer exists"%self.__app_id)
-      else:
+    app_mgr, cluster_mgr = self.__app_mgr, self.__cluster_mgr
+    global_sched, local_sched = self.__global_scheduler, self.__local_sched
+    app, ensemble = self.__app, self.__ensemble
+    if ensemble:
+      await self._update_task_states(ensemble.current_tasks)
+    else:
+      self.__ensemble = ensemble = TaskEnsemble(app)
+    agents = await cluster_mgr.get_agents(0)
+    plan = await local_sched.schedule(ensemble, agents)
+    if plan.done:
+      self.logger.debug("Scheduling for appliance '%s' has finished"%app.id)
+      self.stop()
+      return
+    await global_sched.submit(plan)
+
+  async def _update_task_states(self, tasks):
+    assert isinstance(tasks, Iterable) and all([isinstance(t, Task) for t in tasks])
+    task_mgr, srv_mgr, job_mgr = self.__task_mgr, self.__srv_mgr, self.__job_mgr
+    contr_mgr = self.__contr_mgr
+    general_tasks, srv_tasks, job_tasks = [], [], []
+    for t in tasks:
+      if t.mesos_task_id:
+        general_tasks += t,
+      elif isinstance(t, ServiceTask):
+        srv_tasks += t,
+      elif isinstance(t, JobTask):
+        job_tasks += t,
+    for status, t, err in await multi([task_mgr.update_task(t) for t in general_tasks]):
+      if status != 200:
         self.logger.error(err)
-      self.stop()
-      return
-    # get cluster info
-    agents = await self.__global_sched_exec.get_agents()
-    # contact the scheduler for new schedule
-    sched = await self.__local_sched.schedule(app, list(agents))
-    self.logger.debug('Containers to be scheduled: %s'%[c.id for c in sched.containers])
-    # if the scheduling is done
-    if sched.done:
-      self.logger.info('Scheduling is done for appliance %s'%self.__app_id)
-      self.stop()
-      return
-    # execute the new schedulex
-    await self.__global_sched_exec.submit(sched)
+    for status, t, err in await multi([srv_mgr.update_service_task(t) for t in srv_tasks]):
+      if status != 200:
+        self.logger.error(err)
+    for status, t, err in await multi([job_mgr.update_job_task(t) for t in job_tasks]):
+      if status != 200:
+        self.logger.error(err)
+    await multi([job_mgr.delete_job_task(t) for t in tasks
+                 if isinstance(t, JobTask) and t.state == TaskState.TASK_FINISHED])
+    # persist task updates to DB
+    for c in set([t.container for t in tasks]):
+      await contr_mgr.save_container(c)
 
 
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
@@ -53,87 +87,57 @@ class ApplianceScheduler(Loggable, metaclass=ABCMeta):
   def config(self):
     return dict(self.__config)
 
-  async def schedule(self, app, agents):
+  async def schedule(self, ensemble, agents):
     """
     Caution: the parameters should not be overridden by schedulers that extend
     this class, otherwise inconsistency of appliance/cluster info will be caused.
+
+    :param ensemble: schedule.base.TaskEnsemble
+    :param agents: cluster.Agent
+    :return: schedule.SchedulePlan
 
     """
     raise NotImplemented
 
 
-from container import ContainerState, ContainerType, ContainerVolumeType
-
-
 class DefaultApplianceScheduler(ApplianceScheduler):
   """
-  Greedy bin-packing heuristic
+  Delegate to the Mesos opportunistic scheduler
 
   """
 
   def __init__(self, *args, **kwargs):
     super(DefaultApplianceScheduler, self).__init__(*args, **kwargs)
 
-  async def schedule(self, app, agents):
+  async def schedule(self, ensemble, agents):
     """
 
-    :param app: appliance.Appliance
+    :param ensemble: schedule.base.TaskEnsemble
     :param agents: cluster.Agent
     :return: schedule.SchedulePlan
 
     """
-    sched = SchedulePlan()
-    free_contrs = self.resolve_dependencies(app)
-    self.logger.info('Free containers: %s'%[c.id for c in free_contrs])
-    if not free_contrs:
-      sched.done = True
-      return sched
-    contrs_to_create = [c for c in free_contrs
-                        if c.state in (ContainerState.SUBMITTED, ContainerState.FAILED)]
-    for c in contrs_to_create:
-      c.sys_schedult_hints = c.user_schedule_hints
+    assert isinstance(ensemble, TaskEnsemble)
+    assert isinstance(agents, Iterable) and all([isinstance(a, cluster.Agent) for a in agents])
+    plan = SchedulePlan()
+    cur_tasks, ready_tasks = ensemble.current_tasks, ensemble.ready_tasks
+    if len(cur_tasks) == 0 and len(ready_tasks) == 0:
+      plan.set_done()
+      return plan
+    self.logger.debug('Tasks to schedule: %s'%[c.id for c in ready_tasks])
+    for t in ready_tasks:
+      contr = t.container
+      assert isinstance(contr, container.Container)
+      t.schedule_hints = contr.schedule_hints
+    plan.add_tasks(*ready_tasks)
+
+    app = ensemble.appliance
     vols_declared = {v.id: v for v in app.volumes}
-    vols_to_create = set([v.src for c in contrs_to_create for v in c.persistent_volumes
-                          if v.type == ContainerVolumeType.PERSISTENT
-                          and v.src in vols_declared
-                          and not vols_declared[v.src].is_active])
-    for vid in vols_to_create:
-      vols_declared[vid].sys_schedule_hints = vols_declared[vid].user_schedule_hints
-    sched.add_containers(contrs_to_create)
-    sched.add_volumes([vols_declared[vid] for vid in vols_to_create])
-    return sched
-
-  def resolve_dependencies(self, app):
-    contrs = {c.id: c for c in app.containers
-              if (c.type == ContainerType.JOB and c.state != ContainerState.SUCCESS)
-              or (c.type == ContainerType.SERVICE and c.state != ContainerState.RUNNING)}
-    parents = {}
-    for c in contrs.values():
-      parents.setdefault(c.id, set()).update([d for d in c.dependencies if d in contrs])
-    return [contrs[k] for k, v in parents.items() if not v]
-
-  def find_placement(self, contrs, agents):
-    import container
-    placement = Placement()
-    cpus_demanded = sum([(c.resources.cpus * c.instances
-                          if isinstance(c, container.service.Service) else c.resources.cpus)
-                         for c in contrs])
-    for locality in ('host', 'zone', 'region', 'cloud', ):
-      agents = list(sorted(agents, key=lambda a: a.attributes[locality]))
-      key, cpus_avail = max([(k, sum([a.resources.cpus for a in group]))
-                             for k, group in groupby(agents, lambda a: a.attributes[locality])],
-                            key=lambda x: x[1])
-      self.logger.info('locality: %s, value: %s, '
-                       'CPU available: %.1f, CPU demanded: %.1f'%(locality, key, cpus_avail, cpus_demanded))
-      if cpus_avail >= cpus_demanded:
-        if locality == 'host':
-          placement.host = key
-        elif locality == 'zone':
-          placement.zone = key
-        elif locality == 'region':
-          placement.region = key
-        elif locality == 'cloud':
-          placement.region = key
-        break
-    return placement
-
+    ready_vols = set([v.src for t in ready_tasks for v in t.container.persistent_volumes
+                      if v.type == container.ContainerVolumeType.PERSISTENT
+                      and v.src in vols_declared
+                      and not vols_declared[v.src].is_active])
+    ready_vols = [vols_declared[vid] for vid in ready_vols]
+    self.logger.debug('Volumes to schedule: %s'%ready_vols)
+    plan.add_volumes(*ready_vols)
+    return plan

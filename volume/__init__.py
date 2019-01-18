@@ -174,19 +174,12 @@ class PersistentVolume:
     if from_user:
       for f in ('deployment', ):
         data.pop(f, None)
-      sched_hints = data.pop('schedule_hints', None)
-      if sched_hints:
-        status, sched_hints, err = VolumeScheduleHints.parse(sched_hints, from_user)
-        if status != 200:
-          return status, None, err
-        data['user_schedule_hints'] = sched_hints
-    else:
-      user_sched_hints = data.get('user_schedule_hints')
-      sys_sched_hints = data.get('sys_schedule_hints')
-      if user_sched_hints:
-        _, data['user_schedule_hints'], _ = VolumeScheduleHints.parse(user_sched_hints, from_user)
-      if sys_sched_hints:
-        _, data['sys_schedule_hints'], _ = VolumeScheduleHints.parse(sys_sched_hints, from_user)
+    sched_hints = data.pop('schedule_hints', None)
+    if sched_hints:
+      status, sched_hints, err = VolumeScheduleHints.parse(sched_hints, from_user)
+      if status != 200:
+        return status, None, err
+      data['schedule_hints'] = sched_hints
     vol = None
     if scope == VolumeScope.LOCAL:
       vol = LocalPersistentVolume(**data)
@@ -197,26 +190,19 @@ class PersistentVolume:
     return 200, vol, None
 
   def __init__(self, id, type, state=PersistentVolumeState.CREATED,
-               scope=VolumeScope.LOCAL, user_schedule_hints=None, sys_schedule_hints=None,
+               scope=VolumeScope.LOCAL, schedule_hints=None,
                deployment=None, *args, **kwargs):
     self.__id = str(id)
     self.__scope = VolumeScope(scope.upper()) if isinstance(scope, str) else scope
     self.__type = PersistentVolumeType(type.lower()) if isinstance(type, str) else type
     self.__state = PersistentVolumeState(state.lower()) if isinstance(state, str) else state
 
-    if isinstance(user_schedule_hints, dict):
-      self.__user_schedule_hints = VolumeScheduleHints(**user_schedule_hints)
-    elif isinstance(user_schedule_hints, VolumeScheduleHints):
-      self.__user_schedule_hints = user_schedule_hints
+    if isinstance(schedule_hints, dict):
+      self.__schedule_hints = VolumeScheduleHints(**schedule_hints)
+    elif isinstance(schedule_hints, VolumeScheduleHints):
+      self.__schedule_hints = schedule_hints
     else:
-      self.__user_schedule_hints = VolumeScheduleHints()
-
-    if isinstance(sys_schedule_hints, dict):
-      self.__sys_schedule_hints = VolumeScheduleHints(**sys_schedule_hints)
-    elif isinstance(sys_schedule_hints, VolumeScheduleHints):
-      self.__sys_schedule_hints = sys_schedule_hints
-    else:
-      self.__sys_schedule_hints = VolumeScheduleHints()
+      self.__schedule_hints = VolumeScheduleHints()
 
     if isinstance(deployment, dict):
       self.__deployment = VolumeDeployment(**deployment)
@@ -273,18 +259,7 @@ class PersistentVolume:
 
   @property
   @swagger.property
-  def user_schedule_hints(self):
-    """
-    User-specified volume schedule hints
-    ---
-    type: VolumeScheduleHints
-
-    """
-    return self.__user_schedule_hints
-
-  @property
-  @swagger.property
-  def sys_schedule_hints(self):
+  def schedule_hints(self):
     """
     System volume schedule hints
     ---
@@ -292,7 +267,7 @@ class PersistentVolume:
     read_only: true
 
     """
-    return self.__sys_schedule_hints
+    return self.__schedule_hints
 
   @property
   @swagger.property
@@ -314,10 +289,10 @@ class PersistentVolume:
   def type(self, type):
     self.__type = type
 
-  @sys_schedule_hints.setter
-  def sys_schedule_hints(self, hints):
+  @schedule_hints.setter
+  def schedule_hints(self, hints):
     assert isinstance(hints, VolumeScheduleHints)
-    self.__sys_schedule_hints = hints
+    self.__schedule_hints = hints
 
   @deployment.setter
   def deployment(self, deployment):
@@ -334,8 +309,7 @@ class PersistentVolume:
                 type=self.type.value,
                 state=self.state.value,
                 scope=self.scope.value,
-                user_schedule_hints=self.user_schedule_hints.to_render(),
-                sys_schedule_hints=self.sys_schedule_hints.to_render(),
+                schedule_hints=self.schedule_hints.to_render(),
                 deployment=self.deployment.to_render())
 
   def to_save(self):
@@ -343,14 +317,13 @@ class PersistentVolume:
                 type=self.type.value,
                 state=self.state.value,
                 scope=self.scope.value,
-                user_schedule_hints=self.user_schedule_hints.to_save(),
-                sys_schedule_hints=self.sys_schedule_hints.to_save(),
+                schedule_hints=self.schedule_hints.to_save(),
                 deployment=self.deployment.to_render())
 
   def to_request(self):
     req = dict(name=('%s-%s'%(self.appliance, self.id)
                      if self.scope == VolumeScope.LOCAL else str(self.id)))
-    sched_hints = self.sys_schedule_hints.placement
+    sched_hints = self.schedule_hints.placement
     if sched_hints.host:
       req['placement'] = dict(type='host', value=sched_hints.host)
     elif sched_hints.zone:
