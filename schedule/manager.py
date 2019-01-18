@@ -98,12 +98,12 @@ class ServiceTaskManager(APIManager):
     assert isinstance(task, ServiceTask)
     app_id = task.container.appliance.id
     api, endpoint = config.marathon, '%s/apps/%s/%s'%(config.marathon.endpoint, app_id, task.id)
-    resp = await self.http_cli.post(api.host, api.port, endpoint, self._create_request(task))
+    resp = await self.http_cli.put(api.host, api.port, endpoint, self._create_request(task))
     task.launch_time, task.state = dt.datetime.now(), TaskState.TASK_SUBMITTED
     return resp
 
   async def delete_service_task(self, task):
-    assert isinstance(task, ServiceTask)
+    assert isinstance(task, Task)
     api, app = config.marathon, task.container.appliance
     assert isinstance(app, Appliance)
     endpoint = '%s/apps/%s/%s?force=true'%(api.endpoint, app.id, task.id)
@@ -114,7 +114,7 @@ class ServiceTaskManager(APIManager):
     app, contr = task.container.appliance, task.container
     assert isinstance(app, Appliance)
     assert isinstance(contr, Service)
-    params = [dict(key='hostname', value=str(self.id)),
+    params = [dict(key='hostname', value=str(task.id)),
               dict(key='rm', value='true'),
               dict(key='oom-kill-disable', value='true')]
     # config persistent volumes
@@ -201,14 +201,14 @@ class JobTaskManager(APIManager):
     return resp
 
   async def kill_job_task(self, task):
-    assert isinstance(task, JobTask)
+    assert isinstance(task, Task)
     api, app = config.chronos, task.container.appliance
     assert isinstance(app, Appliance)
     endpoint = '%s/task/kill/%s.%s'%(api.endpoint, app.id, task.id)
     return await self.http_cli.delete(api.host, api.port, endpoint)
 
   async def delete_job_task(self, task):
-    assert isinstance(task, JobTask)
+    assert isinstance(task, Task)
     api, app = config.chronos, task.container.appliance
     assert isinstance(app, Appliance)
     endpoint = '%s/job/%s.%s'%(api.endpoint, app.id, task.id)

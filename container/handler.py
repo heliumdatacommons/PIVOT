@@ -39,8 +39,7 @@ class ServicesHandler(RequestHandler, Loggable):
           application/json:
             schema: Error
     """
-    status, services, err = await self.__contr_mgr.get_containers(appliance=app_id,
-                                                                  type='service')
+    status, services, err = await self.__contr_mgr.get_containers(appliance=app_id, type='service')
     self.set_status(status)
     self.write(json_encode([s.to_render() for s in services] if status == 200 else error(err)))
 

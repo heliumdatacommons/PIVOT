@@ -2,7 +2,7 @@ import re
 import json
 import swagger
 
-import appliance
+import appliance as app
 import volume
 import schedule
 
@@ -440,17 +440,17 @@ class Container:
         return 400, None, str(e)
     return 400, 'Unknown container type: %s'%data['type'], None
 
-  def __init__(self, id, type, image, resources, instances=1, app=None, cmd=None, args=[], env={},
+  def __init__(self, id, appliance, type, image, resources, instances=1, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
                is_privileged=False, force_pull_image=True, dependencies=[], schedule_hints=None,
                tasks=[], *aargs, **kwargs):
     self.__id = id
+    assert isinstance(appliance, str) or isinstance(appliance, app.Appliance)
+    self.__appliance = appliance
     self.__type = type if isinstance(type, ContainerType) else ContainerType(type)
     self.__image = image
     self.__resources = Resources(**resources)
     self.__instances = instances
-    assert app is None or isinstance(app, appliance.Appliance)
-    self.__appliance = app
     self.__cmd = cmd and str(cmd)
     self.__args = [a and str(a) for a in args]
     if self.__cmd and self.__args:
@@ -745,9 +745,9 @@ class Container:
     self.__resources = resources
 
   @appliance.setter
-  def appliance(self, app):
-    assert isinstance(app, appliance.Appliance)
-    self.__appliance = app
+  def appliance(self, appliance):
+    assert isinstance(appliance, str) or isinstance(appliance, app.Appliance)
+    self.__appliance = appliance
 
   @endpoints.setter
   def endpoints(self, endpoints):
@@ -767,7 +767,7 @@ class Container:
 
   def to_render(self):
     return dict(id=self.id,
-                appliance=self.appliance.id if self.appliance else None,
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value,
                 image=self.image,
                 resources=self.resources.to_render(),
@@ -779,7 +779,7 @@ class Container:
 
   def to_save(self):
     return dict(id=self.id,
-                appliance=self.appliance.id if self.appliance else None,
+                appliance=self.appliance if isinstance(self.appliance, str) else self.appliance.id,
                 type=self.type.value,
                 image=self.image,
                 resources=self.resources.to_save(),

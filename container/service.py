@@ -273,5 +273,5 @@ class Service(Container):
       r.setdefault('constraints', []).append(['cloud', 'CLUSTER', str(placement.cloud)])
     return r
 
-  def __str__(self):
+  def __repr__(self):
     return '/%s/%s'%(self.appliance, self.id)

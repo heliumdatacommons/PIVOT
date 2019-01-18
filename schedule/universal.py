@@ -27,7 +27,7 @@ class GlobalSchedulerRunner(Loggable, metaclass=Singleton):
     self.__schedulers[app_id] = app_scheduler
 
   def deregister(self, app_id):
-    self.__schedulers.pop(app_id, None)
+    return self.__schedulers.pop(app_id, None)
 
   async def submit(self, plan):
     """

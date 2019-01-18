@@ -23,21 +23,17 @@ class ApplianceManager(Manager):
     self.__vol_mgr = VolumeManager()
     self.__global_sched = GlobalSchedulerRunner()
 
-  async def get_appliance(self, app_id):
+  async def get_appliance(self, app_id, full_blown=False):
     db, contr_mgr, vol_mgr = self.__app_db, self.__contr_mgr, self.__vol_mgr
     status, app, err = await db.get_appliance(app_id)
     if status != 200:
       return status, app, err
     app = Appliance(**app)
-    status, app.containers, err = await contr_mgr.get_containers(appliance=app_id)
+    status, app.containers, err = await contr_mgr.get_containers(appliance=app_id, full_blown=full_blown)
     if app.data_persistence:
       _, local_vols, _ = await  vol_mgr.get_local_volumes(appliance=app_id)
       _, global_vols, _ = await vol_mgr.get_global_volumes_by_appliance(app_id)
       app.data_persistence.volumes = local_vols + global_vols
-    if len(app.containers) == 0 \
-        and (not app.data_persistence or len(app.data_persistence.volumes) == 0):
-      await db.delete_appliance(app_id)
-      return 404, None, "Appliance '%s' is not found"%app_id
     return 200, app, None
 
   async def create_appliance(self, data):
@@ -65,7 +61,7 @@ class ApplianceManager(Manager):
 
     # validation
     status, app, _ = await self.get_appliance(data['id'])
-    if status == 200 and len(app.containers) > 0:
+    if status == 200:
       return 409, None, "Appliance '%s' already exists"%data['id']
     status, app, err = Appliance.parse(data)
     if status != 200:
@@ -122,13 +118,16 @@ class ApplianceManager(Manager):
     return 201, app, None
 
   async def delete_appliance(self, app_id, purge_data=False):
-    contr_mgr, vol_mgr = self.__contr_mgr, self.__vol_mgr
+    global_sched, contr_mgr, vol_mgr = self.__global_sched, self.__contr_mgr, self.__vol_mgr
     self.logger.debug('Purge data?: %s'%purge_data)
     status, app, err = await self.get_appliance(app_id)
     if status != 200:
       self.logger.error(err)
       return status, None, err
-    self.logger.info("Stop monitoring appliance '%s'"%app_id)
+    app_sched = global_sched.deregister(app_id)
+    if app_sched:
+      self.logger.info("Stop monitoring appliance '%s'" % app_id)
+      app_sched.stop()
     # deprovision containers
     status, msg, err = await contr_mgr.delete_containers(appliance=app_id)
     if status != 200:
@@ -152,7 +151,7 @@ class ApplianceManager(Manager):
         for status, _, err in (await multi([vol_mgr.update_volume(gpv) for gpv in global_vols])):
           if status != 200:
             self.logger.error(err)
-    if purge_data:
+    if not app.data_persistence or purge_data:
       ApplianceDeletionEnforcer(app_id).start()
     return status, msg, None
 
@@ -234,7 +233,11 @@ class ApplianceDeletionEnforcer(AutonomousMonitor):
       self.logger.error(err)
       return
     if len(deployments) > 0:
-      self.logger.debug("Deprovisioning '%s' (%d left)"%(app_id, len(deployments)))
+      self.logger.debug("Deprovisioning appliance [%s] (%d left)"%(app_id, len(deployments)))
       return
-    self.logger.debug("Deleting '%s'"%app_id)
+    self.logger.debug("Deleting appliance [%s]"%app_id)
     await multi([api.delete_appliance(app_id), db.delete_appliance(app_id)])
+    self.stop()
+    self.logger.debug("Appliance [%s] has been deleted, exit"%app_id)
+
+

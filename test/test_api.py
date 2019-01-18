@@ -81,3 +81,29 @@ class SchedulerTest(TestCase):
                ])
     r = requests.post('%s/appliance' % self.pivot, data=json_encode(app))
     self.assertEqual(201, r.status_code)
+
+  def test_service_job_mix(self):
+    # self.db.drop_database('pivot')
+    app = dict(id='mix',
+               containers=[
+                 dict(id='first-service',
+                      type='service',
+                      instances=2,
+                      image='ubuntu',
+                      resources=dict(cpus=1, mem=1024, disk=128),
+                      network_mode='container',
+                      cmd='tail -f /dev/null'),
+                 dict(id='second-job',
+                      type='job',
+                      instances=5,
+                      image='ubuntu',
+                      resources=dict(cpus=.5, mem=512, disk=128),
+                      cmd='sleep $(shuf -i 10-20 -n 1)',
+                      dependencies=['first-service'])
+               ])
+    r = requests.post('%s/appliance' % self.pivot, data=json_encode(app))
+    self.assertEqual(201, r.status_code)
+
+  def test_delete_appliance(self):
+    r = requests.delete('%s/appliance/mix'%self.pivot)
+    self.assertEqual(200, r.status_code)

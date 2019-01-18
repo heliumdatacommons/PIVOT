@@ -5,8 +5,8 @@ import appliance.manager
 from config import config
 from commons import MongoClient, Manager
 from container import Container, ContainerType
+from schedule.task import ServiceTask, JobTask
 from schedule.manager import ServiceTaskManager, JobTaskManager
-
 
 class ContainerManager(Manager):
 
@@ -20,16 +20,18 @@ class ContainerManager(Manager):
     status, contr, err = await db.get_container(app_id, contr_id)
     if status == 404:
       return status, contr, err
-    app_mgr = appliance.manager.ApplianceManager()
-    status, contr.appliance, err = await app_mgr.get_appliance(app_id)
+    if full_blown:
+      app_mgr = appliance.manager.ApplianceManager()
+      status, contr.appliance, err = await app_mgr.get_appliance(app_id)
     return 200, contr, None
 
-  async def get_containers(self, **filters):
+  async def get_containers(self, full_blown=False, **filters):
     db = self.__contr_db
     contrs = await db.get_containers(**filters)
-    app_mgr = appliance.manager.ApplianceManager()
-    for c in contrs:
-      _, c.appliance, _ = await app_mgr.get_appliance(c.appliance)
+    if full_blown:
+      app_mgr = appliance.manager.ApplianceManager()
+      for c in contrs:
+        _, c.appliance, _ = await app_mgr.get_appliance(c.appliance.id)
     return 200, contrs, None
 
   async def create_container(self, data):
@@ -44,7 +46,7 @@ class ContainerManager(Manager):
 
   async def delete_container(self, app_id, contr_id):
     db, srv_mgr, job_mgr = self.__contr_db, self.__srv_mgr, self.__job_mgr
-    status, contr, err = await self.get_container(app_id, contr_id)
+    status, contr, err = await self.get_container(app_id, contr_id, full_blown=True)
     if status == 404:
       return status, contr, err
     tasks = contr.tasks
@@ -52,7 +54,7 @@ class ContainerManager(Manager):
       res = await multi([srv_mgr.delete_service_task(t) for t in tasks])
       failed = []
       for i, (status, _, err) in enumerate(res):
-        if status != 200:
+        if status not in (200, 404):
           self.logger.error(err)
           failed += tasks[i].id,
       if failed:
@@ -61,7 +63,7 @@ class ContainerManager(Manager):
       failed = []
       res = await multi([job_mgr.delete_job_task(t) for t in tasks])
       for i, (status, _, err) in enumerate(res):
-        if status != 200:
+        if status != 200 and 'not found' not in err:
           self.logger.error(err)
           failed += tasks[i].id,
       if failed:
@@ -72,7 +74,7 @@ class ContainerManager(Manager):
   async def delete_containers(self, **filters):
     db, failed = self.__contr_db, []
     contrs = await db.get_containers(**filters)
-    for i, (status, _, err) in enumerate(await multi([self.delete_container(c) for c in contrs])):
+    for i, (status, _, err) in enumerate(await multi([self.delete_container(c.appliance, c.id) for c in contrs])):
       if status != 200:
         self.logger.error(err)
         failed += contrs[i],

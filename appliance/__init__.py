@@ -47,7 +47,7 @@ class Appliance:
       if from_user:
         for unwanted_f in ('appliance', ):
           c.pop(unwanted_f, None)
-      status, contr, err = Container.parse(c, from_user)
+      status, contr, err = Container.parse(dict(**c, appliance=data['id']), from_user)
       if status != 200:
         return status, None, err
       containers.append(contr)
