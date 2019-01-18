@@ -1,5 +1,6 @@
 import networkx as nx
 import datetime as dt
+import dateutil.parser
 
 from enum import Enum
 from collections import Iterable
@@ -10,6 +11,7 @@ from commons import Loggable
 
 class TaskState(Enum):
 
+  TASK_NASCENT = 'TASK_NASCENT'
   TASK_SUBMITTED = 'TASK_SUBMITTED'
   TASK_STAGING = 'TASK_STAGING'
   TASK_STARTING = 'TASK_STARTING'
@@ -22,31 +24,48 @@ class TaskState(Enum):
   TASK_ERROR = 'TASK_ERROR'
   TASK_DROPPED = 'TASK_DROPPED'
   TASK_UNREACHABLE = 'TASK_UNREACHABLE'
-  TASK_UNKNOWN = 'TASK_UNKNOWN'
   TASK_GONE = 'TASK_GONE'
 
 
 class Task(Loggable):
 
   MAX_LAUNCH_DELAY = 60
-  
-  def __init__(self, container, seqno, launch_time=None, dependencies=[], schedule_hints=None, *args, **kwargs):
+
+  @classmethod
+  def parse(cls, data):
+    from container import Container, ContainerType
+    contr = data.get('container')
+    if not isinstance(contr, Container):
+      return 400, None, "Container for the task is not set"
+    if 'state' in data:
+      data['state'] = TaskState(data['state'].upper())
+    if contr.type == ContainerType.SERVICE:
+      return 200, ServiceTask(**data), None
+    elif contr.type == ContainerType.JOB:
+      return 200, JobTask(**data), None
+    else:
+      return 400, None, "Unknown container type: %s"%contr.type
+
+  def __init__(self, container, seqno, launch_time=None, dependencies=[], schedule_hints=None,
+               state=TaskState.TASK_NASCENT, mesos_task_id=None, *args, **kwargs):
     from container import Container
     from schedule import ScheduleHints
     assert isinstance(container, Container)
     self.__container = container
     assert isinstance(seqno, int)
     self.__seqno =seqno
-    assert launch_time is None or isinstance(launch_time, dt.datetime)
-    self.__launch_time = launch_time
+    assert launch_time is None or isinstance(launch_time, str) or isinstance(launch_time, dt.datetime)
+    self.__launch_time = dateutil.parser.parse(launch_time) if isinstance(launch_time, str) else launch_time
     assert isinstance(dependencies, Iterable) and all([isinstance(d, Task) for d in dependencies])
     self.__dependencies = dependencies
     assert schedule_hints is None or isinstance(schedule_hints, ScheduleHints)
     self.__schedule_hints = schedule_hints
+    assert isinstance(state, TaskState)
+    self.__state = state
     self.__endpoints = []
-    self.__state = None
     self.__placement = None
-    self.__mesos_task_id = None
+    assert mesos_task_id is None or isinstance(mesos_task_id, str)
+    self.__mesos_task_id = mesos_task_id
 
   @property
   def id(self):
@@ -130,12 +149,14 @@ class Task(Loggable):
   def to_render(self):
     return dict(id=self.id,
                 mesos_task_id=self.mesos_task_id,
-                launch_time=self.launch_time)
+                state=self.state.value,
+                launch_time=self.launch_time.isoformat())
 
   def to_save(self):
     return dict(seqno=self.seqno,
                 mesos_task_id=self.mesos_task_id,
-                launch_time=self.launch_time)
+                state=self.state.value,
+                launch_time=self.launch_time.isoformat())
 
   def __hash__(self):
     return hash((self.container, self.seqno))
@@ -151,18 +172,18 @@ class Task(Loggable):
 
 class ServiceTask(Task):
   
-  def __init__(self, service, *args, **kwargs):
+  def __init__(self, container, *args, **kwargs):
     from container.service import Service
-    assert isinstance(service, Service)
-    super(ServiceTask, self).__init__(service, *args, **kwargs)
+    assert isinstance(container, Service)
+    super(ServiceTask, self).__init__(container, *args, **kwargs)
 
 
 class JobTask(Task):
   
-  def __init__(self, job, *args, **kwargs):
+  def __init__(self, container, *args, **kwargs):
     from container.job import Job
-    assert isinstance(job, Job)
-    super(JobTask, self).__init__(job, *args, **kwargs)
+    assert isinstance(container, Job)
+    super(JobTask, self).__init__(container, *args, **kwargs)
 
 
 class TaskEnsemble(Loggable):

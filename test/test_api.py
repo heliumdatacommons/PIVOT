@@ -104,6 +104,12 @@ class SchedulerTest(TestCase):
     r = requests.post('%s/appliance' % self.pivot, data=json_encode(app))
     self.assertEqual(201, r.status_code)
 
+  def test_get_appliance(self):
+    r = requests.get('%s/appliance/mix'%self.pivot)
+    self.assertEqual(r.status_code, 200)
+    import json
+    print(json.dumps(r.json(), indent=2))
+
   def test_delete_appliance(self):
     r = requests.delete('%s/appliance/mix'%self.pivot)
     self.assertEqual(200, r.status_code)

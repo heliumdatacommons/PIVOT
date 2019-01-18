@@ -5,6 +5,7 @@ import swagger
 import appliance as app
 import volume
 import schedule
+import schedule.task
 
 from enum import Enum
 
@@ -406,6 +407,101 @@ class ContainerScheduleHints(schedule.ScheduleHints):
     return dict(**super(ContainerScheduleHints, self).to_save(), preemptible=self.preemptible)
 
 
+class ContainerState:
+
+  def __init__(self, contr):
+    assert isinstance(contr, Container)
+    self.__contr = contr
+
+  @property
+  def num_nascent_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_NASCENT])
+
+  @property
+  def num_submitted_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_SUBMITTED])
+
+  @property
+  def num_running_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_RUNNING])
+
+  @property
+  def num_staging_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_STAGING])
+
+  @property
+  def num_starting_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_STARTING])
+
+  @property
+  def num_finished_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_FINISHED])
+
+  @property
+  def num_failed_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_FAILED])
+  
+  @property
+  def num_killed_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_KILLED])
+  
+  @property
+  def num_killing_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_KILLING])
+
+  @property
+  def num_error_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_ERROR])
+
+  @property
+  def num_dropped_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_DROPPED])
+
+  @property
+  def num_gone_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_GONE])
+
+  @property
+  def num_lost_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_LOST])
+
+  @property
+  def num_unreachable_tasks(self):
+    return len([t for t in self.__contr.tasks if t.state == schedule.task.TaskState.TASK_UNREACHABLE])
+
+  def to_render(self):
+    instances, res = self.__contr.instances, {}
+    if self.num_nascent_tasks > 0:
+      res.update(num_nascent_tasks='%d/%d'%(self.num_nascent_tasks, instances))
+    if self.num_submitted_tasks > 0:
+      res.update(num_submitted_tasks='%d/%d'%(self.num_submitted_tasks, instances))
+    if self.num_staging_tasks > 0:
+      res.update(num_staging_tasks='%d/%d'%(self.num_staging_tasks, instances))
+    if self.num_starting_tasks > 0:
+      res.update(num_starting_tasks='%d/%d'%(self.num_starting_tasks, instances))
+    if self.num_running_tasks > 0:
+      res.update(num_running_tasks='%d/%d'%(self.num_running_tasks, instances))
+    if self.num_finished_tasks > 0:
+      res.update(num_finished_tasks='%d/%d'%(self.num_finished_tasks, instances))
+    if self.num_failed_tasks > 0:
+      res.update(num_failed_tasks='%d/%d'%(self.num_failed_tasks, instances))
+    if self.num_killed_tasks > 0:
+      res.update(num_killed_tasks='%d/%d'%(self.num_killed_tasks, instances))
+    if self.num_killing_tasks > 0:
+      res.update(num_killing_tasks='%d/%d'%(self.num_killing_tasks, instances))
+    if self.num_error_tasks > 0:
+      res.update(num_error_tasks='%d/%d'%(self.num_error_tasks, instances))
+    if self.num_dropped_tasks > 0:
+      res.update(num_dropped_tasks='%d/%d'%(self.num_dropped_tasks, instances))
+    if self.num_gone_tasks > 0:
+      res.update(num_gone_tasks='%d/%d'%(self.num_gone_tasks, instances))
+    if self.num_lost_tasks > 0:
+      res.update(num_lost_tasks='%d/%d'%(self.num_lost_tasks, instances))
+    if self.num_unreachable_tasks > 0:
+      res.update(num_unreachable_tasks='%d/%d'%(self.num_unreachable_tasks, instances))
+    return res
+
+
 @swagger.model
 class Container:
   """
@@ -429,16 +525,25 @@ class Container:
     sched_hints = data.get('schedule_hints')
     if sched_hints:
       _, data['schedule_hints'], _ = ContainerScheduleHints.parse(sched_hints, from_user)
-    if data['type'] == ContainerType.SERVICE.value:
-      from container.service import Service
-      return 200, Service(**data), None
-    if data['type'] == ContainerType.JOB.value:
-      from container.job import Job
-      try:
-        return 200, Job(**data), None
-      except ValueError as e:
-        return 400, None, str(e)
-    return 400, 'Unknown container type: %s'%data['type'], None
+    tasks = data.pop('tasks', [])
+    try:
+      if data['type'] == ContainerType.SERVICE.value:
+        from container.service import Service
+        contr = Service(**data)
+      elif data['type'] == ContainerType.JOB.value:
+        from container.job import Job
+        contr = Job(**data)
+      else:
+        return 400, 'Unknown container type: %s'%data['type'], None
+      for t_data in tasks:
+        t_data['container'] = contr
+        status, t, err = schedule.task.Task.parse(t_data)
+        if status != 200:
+          return status, None, err
+        contr.add_tasks(t)
+      return 200, contr, None
+    except ValueError as e:
+      return 400, None, str(e)
 
   def __init__(self, id, appliance, type, image, resources, instances=1, cmd=None, args=[], env={},
                volumes=[], network_mode=NetworkMode.HOST, endpoints=[], ports=[],
@@ -464,7 +569,6 @@ class Container:
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
     self.__dependencies = list(dependencies)
-
     if isinstance(schedule_hints, dict):
       self.__schedule_hints = ContainerScheduleHints(**schedule_hints)
     elif isinstance(schedule_hints, ContainerScheduleHints):
@@ -475,6 +579,7 @@ class Container:
       self.__tasks = list(tasks)
     elif all([isinstance(t, dict) for t in tasks]):
       self.__tasks = [schedule.task.Task(container=self, **t) for t in tasks]
+    self.__state = ContainerState(self)
 
   @property
   @swagger.property
@@ -714,6 +819,18 @@ class Container:
     return list(self.__tasks)
 
   @property
+  @swagger.property
+  def state(self):
+    """
+    Container state
+    ---
+    type: ContainerState
+    read_only: true
+
+    """
+    return self.__state
+
+  @property
   def host_volumes(self):
     """
     Host volumes
@@ -775,6 +892,7 @@ class Container:
                 endpoints=[e.to_render() for e in self.endpoints],
                 dependencies=self.dependencies,
                 schedule_hints=self.schedule_hints.to_render(),
+                state=self.state.to_render(),
                 tasks=[t.to_render() for t in self.tasks])
 
   def to_save(self):
@@ -793,6 +911,7 @@ class Container:
                 force_pull_image=self.force_pull_image,
                 dependencies=self.dependencies,
                 schedule_hints=self.schedule_hints.to_save(),
+                state=self.state.to_render(),
                 tasks=[t.to_save() for t in self.tasks])
 
   def __hash__(self):
@@ -801,8 +920,8 @@ class Container:
   def __eq__(self, other):
     return isinstance(other, Container) \
             and self.id == other.id \
-            and ((isinstance(self.appliance, appliance.Appliance)
-                 and isinstance(other.appliance, appliance.Appliance)
+            and ((isinstance(self.appliance, app.Appliance)
+                 and isinstance(other.appliance, app.Appliance)
                  and self.appliance == other.appliance)
               or (isinstance(self.appliance, str)
                  and isinstance(other.appliance, str)

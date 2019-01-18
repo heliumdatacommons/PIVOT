@@ -124,7 +124,7 @@ class DefaultApplianceScheduler(ApplianceScheduler):
     if len(cur_tasks) == 0 and len(ready_tasks) == 0:
       plan.set_done()
       return plan
-    self.logger.debug('Tasks to schedule: %s'%[c.id for c in ready_tasks])
+    self.logger.debug('Tasks to schedule: %s'%ready_tasks)
     for t in ready_tasks:
       contr = t.container
       assert isinstance(contr, container.Container)
