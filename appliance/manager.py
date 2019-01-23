@@ -113,7 +113,7 @@ class ApplianceManager(Manager):
     self.logger.info('Appliance %s uses %s'%(app.id, scheduler.__class__.__name__))
     global_sched = self.__global_sched
     app_scheduler = ApplianceSchedulerRunner(app, scheduler)
-    global_sched.register(app.id, app_scheduler)
+    global_sched.register_local_scheduler(app.id, app_scheduler)
     app_scheduler.start()
     return 201, app, None
 
@@ -124,7 +124,7 @@ class ApplianceManager(Manager):
     if status != 200:
       self.logger.error(err)
       return status, None, err
-    app_sched = global_sched.deregister(app_id)
+    app_sched = global_sched.deregister_local_scheduler(app_id)
     if app_sched:
       self.logger.info("Stop monitoring appliance '%s'" % app_id)
       app_sched.stop()

@@ -100,3 +100,16 @@ class Placement:
 
   def to_save(self):
     return self.to_render()
+
+  def __repr__(self):
+    return '%s/%s/%s/%s'%(self.cloud, self.region, self.zone, self.host)
+
+  def __hash__(self):
+    return hash((self.cloud, self.region, self.zone, self.host))
+
+  def __eq__(self, other):
+    return isinstance(other, Placement) \
+           and self.cloud == other.cloud \
+           and self.region == other.region \
+           and self.zone == other.zone \
+           and self.host == other.host

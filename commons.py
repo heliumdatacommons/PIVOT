@@ -3,10 +3,12 @@ import json
 import logging
 import tornado
 
-from abc import ABCMeta, abstractmethod
+from abc import abstractmethod
+from collections import deque
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
 from tornado.gen import sleep
+from tornado.locks import Lock
 from motor.motor_tornado import MotorClient
 
 from util import dirname
@@ -101,7 +103,7 @@ class APIManager(Manager):
     self.http_cli = AsyncHttpClientWrapper()
 
 
-class AutonomousMonitor(Loggable, metaclass=ABCMeta):
+class AutonomousMonitor(Loggable):
 
   def __init__(self, interval):
     self.__interval = interval
@@ -122,3 +124,20 @@ class AutonomousMonitor(Loggable, metaclass=ABCMeta):
   @abstractmethod
   async def callback(self):
     raise NotImplemented
+
+
+class SynchronizedQueue:
+
+  def __init__(self):
+    self.__lock = Lock()
+    self.__queue = deque()
+
+  async def enqueue(self, *items):
+    async with self.__lock:
+      self.__queue += deque(items)
+
+  async def dequeue_all(self):
+    async with self.__lock:
+      cur_q = deque(self.__queue)
+      self.__queue.clear()
+      return cur_q

@@ -3,15 +3,16 @@ import tornado
 from tornado.web import Application, StaticFileHandler
 from tornado.httpserver import HTTPServer
 
-from appliance import Appliance
-from container import Container
-from volume import PersistentVolume
 from cluster.handler import ClusterInfoHandler
+from cluster.manager import ClusterManager
+from appliance import Appliance
 from appliance.handler import AppliancesHandler, ApplianceHandler
 from appliance.ui.handler import ApplianceUIHandler
+from container import Container
 from container.handler import ContainersHandler, ContainerHandler, ServicesHandler, JobsHandler
+from volume import PersistentVolume
 from volume.handler import ApplianceVolumesHandler, ApplianceVolumeHandler, GlobalVolumeHandler
-from cluster.manager import ClusterManager
+from schedule.universal import GlobalSchedulerRunner
 from index.handler import IndexHandler
 from ping.handler import PingHandler
 from swagger.handler import SwaggerAPIHandler, SwaggerUIHandler
@@ -21,6 +22,10 @@ from util import dirname
 
 def start_cluster_monitor():
   tornado.ioloop.IOLoop.instance().add_callback(ClusterManager().start_monitor)
+
+
+def start_global_scheduler():
+  tornado.ioloop.IOLoop.instance().add_callback(GlobalSchedulerRunner().start)
 
 
 def start_server():
@@ -51,6 +56,7 @@ def start_server():
   server.bind(config.pivot.port)
   server.start(config.pivot.n_parallel)
   start_cluster_monitor()
+  start_global_scheduler()
   tornado.ioloop.IOLoop.instance().start()
 
 

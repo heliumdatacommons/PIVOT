@@ -186,3 +186,14 @@ class Configuration:
 
 
 config = Configuration.read_config('%s/config.yml'%dirname(__file__))
+
+
+def get_global_scheduler():
+  try:
+    sched_mod = '.'.join(config.pivot.scheduler.split('.')[:-1])
+    sched_class = config.pivot.scheduler.split('.')[-1]
+    return getattr(importlib.import_module(sched_mod), sched_class)()
+  except Exception as e:
+    sys.stderr.write(str(e) + '\n')
+    from schedule.universal import DefaultGlobalScheduler
+    return DefaultGlobalScheduler()

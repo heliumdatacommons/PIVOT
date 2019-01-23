@@ -76,6 +76,10 @@ class Task(Loggable):
     return self.__seqno
 
   @property
+  def appliance(self):
+    return self.container and self.container.appliance
+
+  @property
   def container(self):
     return self.__container
 
@@ -150,13 +154,13 @@ class Task(Loggable):
     return dict(id=self.id,
                 mesos_task_id=self.mesos_task_id,
                 state=self.state.value,
-                launch_time=self.launch_time.isoformat())
+                launch_time=self.launch_time and self.launch_time.isoformat())
 
   def to_save(self):
     return dict(seqno=self.seqno,
                 mesos_task_id=self.mesos_task_id,
                 state=self.state.value,
-                launch_time=self.launch_time.isoformat())
+                launch_time=self.launch_time and self.launch_time.isoformat())
 
   def __hash__(self):
     return hash((self.container, self.seqno))

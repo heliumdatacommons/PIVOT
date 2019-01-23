@@ -1,4 +1,3 @@
-import cluster
 import appliance
 import container
 
@@ -20,12 +19,10 @@ class ApplianceSchedulerRunner(AutonomousMonitor):
     self.__app = app
     assert isinstance(scheduler, ApplianceScheduler)
     self.__local_sched = scheduler
-    self.__app_mgr = appliance.manager.ApplianceManager()
-    self.__contr_mgr = container.manager.ContainerManager()
-    self.__cluster_mgr = cluster.manager.ClusterManager()
     self.__task_mgr = GeneralTaskManager()
     self.__srv_mgr = ServiceTaskManager()
     self.__job_mgr = JobTaskManager()
+    self.__contr_mgr = container.manager.ContainerManager()
     from schedule.universal import GlobalSchedulerRunner
     self.__global_scheduler = GlobalSchedulerRunner()
     self.__ensemble = None
@@ -35,18 +32,17 @@ class ApplianceSchedulerRunner(AutonomousMonitor):
     return self.__ensemble
 
   async def callback(self):
-    app_mgr, cluster_mgr = self.__app_mgr, self.__cluster_mgr
     global_sched, local_sched = self.__global_scheduler, self.__local_sched
     app, ensemble = self.__app, self.__ensemble
     if ensemble:
       await self._update_task_states(ensemble.current_tasks)
     else:
       self.__ensemble = ensemble = TaskEnsemble(app)
-    agents = await cluster_mgr.get_agents(0)
-    plan = await local_sched.schedule(ensemble, agents)
+    plan = await local_sched.schedule(ensemble)
     if plan.done:
       self.logger.debug("Scheduling for appliance '%s' has finished"%app.id)
       self.stop()
+      global_sched.deregister_local_scheduler(app.id)
       return
     await global_sched.submit(plan)
 
@@ -87,13 +83,12 @@ class ApplianceScheduler(Loggable, metaclass=ABCMeta):
   def config(self):
     return dict(self.__config)
 
-  async def schedule(self, ensemble, agents):
+  async def schedule(self, ensemble):
     """
     Caution: the parameters should not be overridden by schedulers that extend
     this class, otherwise inconsistency of appliance/cluster info will be caused.
 
     :param ensemble: schedule.base.TaskEnsemble
-    :param agents: cluster.Agent
     :return: schedule.SchedulePlan
 
     """
@@ -109,16 +104,14 @@ class DefaultApplianceScheduler(ApplianceScheduler):
   def __init__(self, *args, **kwargs):
     super(DefaultApplianceScheduler, self).__init__(*args, **kwargs)
 
-  async def schedule(self, ensemble, agents):
+  async def schedule(self, ensemble):
     """
 
     :param ensemble: schedule.base.TaskEnsemble
-    :param agents: cluster.Agent
     :return: schedule.SchedulePlan
 
     """
     assert isinstance(ensemble, TaskEnsemble)
-    assert isinstance(agents, Iterable) and all([isinstance(a, cluster.Agent) for a in agents])
     plan = SchedulePlan()
     cur_tasks, ready_tasks = ensemble.current_tasks, ensemble.ready_tasks
     if len(cur_tasks) == 0 and len(ready_tasks) == 0:

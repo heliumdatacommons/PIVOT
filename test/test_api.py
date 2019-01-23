@@ -83,7 +83,7 @@ class SchedulerTest(TestCase):
     self.assertEqual(201, r.status_code)
 
   def test_service_job_mix(self):
-    # self.db.drop_database('pivot')
+    self.db.drop_database('pivot')
     app = dict(id='mix',
                containers=[
                  dict(id='first-service',
