@@ -28,6 +28,8 @@ def parse_args():
                       help='Database name')
   parser.add_argument('--https', action='store_true', dest='https',
                       help='Whether to enable HTTPS')
+  parser.add_argument('--global-scheduler', dest='global_scheduler', type=str,
+                      help='Global scheduler')
 
   return parser.parse_args()
 
@@ -39,6 +41,8 @@ def create_pivot_config(args):
                             port=args.port,
                             n_parallel=args.n_parallel,
                             https=args.https)
+  if args.global_scheduler is not None:
+    pivot_cfg['pivot']['scheduler'] = 'schedule.plugin.universal.%s'%args.global_scheduler
   pivot_cfg['db'] = dict(host=args.db_host, port=args.db_port, name=args.db_name)
   yaml.dump(pivot_cfg, open(pivot_cfg_f, 'w'), default_flow_style=False)
 
