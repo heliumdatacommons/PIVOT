@@ -35,16 +35,14 @@ class ApplianceSchedulerRunner(AutonomousMonitor):
     global_sched, local_sched = self.__global_scheduler, self.__local_sched
     app, ensemble = self.__app, self.__ensemble
     if ensemble:
-      await self._update_task_states(ensemble.current_tasks)
+      # self.logger.debug('All tasks: %s' % [(t.id, t.state.value) for t in ensemble.tasks])
+      # self.logger.debug('Updating: %s'%[(t.id, t.state.value) for t in ensemble.unfinished_tasks])
+      await self._update_task_states(ensemble.unfinished_tasks)
     else:
       self.__ensemble = ensemble = TaskEnsemble(app)
     plan = await local_sched.schedule(ensemble)
-    if plan.done:
-      self.logger.debug("Scheduling for appliance '%s' has finished"%app.id)
-      self.stop()
-      global_sched.deregister_local_scheduler(app.id)
-      return
-    await global_sched.submit(plan)
+    if plan is not None:
+      await global_sched.submit(plan)
 
   async def _update_task_states(self, tasks):
     assert isinstance(tasks, Iterable) and all([isinstance(t, Task) for t in tasks])
@@ -70,8 +68,7 @@ class ApplianceSchedulerRunner(AutonomousMonitor):
     await multi([job_mgr.delete_job_task(t) for t in tasks
                  if isinstance(t, JobTask) and t.state == TaskState.TASK_FINISHED])
     # persist task updates to DB
-    for c in set([t.container for t in tasks]):
-      await contr_mgr.save_container(c)
+    await multi([contr_mgr.save_container(c) for c in set([t.container for t in tasks])])
 
 
 class ApplianceScheduler(Loggable, metaclass=ABCMeta):
@@ -112,11 +109,10 @@ class DefaultApplianceScheduler(ApplianceScheduler):
 
     """
     assert isinstance(ensemble, TaskEnsemble)
-    plan = SchedulePlan()
     cur_tasks, ready_tasks = ensemble.current_tasks, ensemble.ready_tasks
     if len(cur_tasks) == 0 and len(ready_tasks) == 0:
-      plan.set_done()
-      return plan
+      return None
+    plan = SchedulePlan()
     self.logger.debug('Tasks to schedule: %s'%ready_tasks)
     for t in ready_tasks:
       contr = t.container

@@ -91,11 +91,6 @@ class SchedulePlan:
     assert all([isinstance(v, volume.PersistentVolume) for v in volumes])
     self.__tasks = list(tasks)
     self.__volumes = list(volumes)
-    self.__done = False
-
-  @property
-  def done(self):
-    return self.__done
 
   @property
   def tasks(self):
@@ -104,9 +99,6 @@ class SchedulePlan:
   @property
   def volumes(self):
     return list(self.__volumes)
-
-  def set_done(self):
-    self.__done = True
 
   def add_tasks(self, *tasks):
     self.__tasks += tasks

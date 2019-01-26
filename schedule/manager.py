@@ -38,15 +38,15 @@ class GeneralTaskManager(APIManager):
       if not agent:
         await cluster_mgr.update()
         agent = await cluster_mgr.get_agent(state['slave_id'])
-      task.placement = agent.locality
+      task.placement = agent.locality.clone()
       hostname = agent.fqdn or agent.public_ip
       if task.container.network_mode == NetworkMode.HOST:
-        endpoints = [Endpoint(hostname, p['number'], p['number'], p['protocol'])
-                    for p in state.get('discovery', {}).get('ports', {}).get('ports', [])]
+        endpoints = [Endpoint(hostname, p['number'], p['number'], task.id, p['protocol'])
+                     for p in state.get('discovery', {}).get('ports', {}).get('ports', [])]
       else:
-        endpoints = [Endpoint(hostname, p['container_port'], p['host_port'], p['protocol'])
-                    for p in state.get('container', {}).get('docker', {}).get('port_mappings', [])]
-      task.add_endpoints(*endpoints)
+        endpoints = [Endpoint(hostname, p['container_port'], p['host_port'], task.id, p['protocol'])
+                     for p in state.get('container', {}).get('docker', {}).get('port_mappings', [])]
+      task.update_endpoints(*endpoints)
 
     await parse_mesos_response(body)
     return 200, task, None
@@ -76,14 +76,14 @@ class ServiceTaskManager(APIManager):
       if not agent:
         await cluster_mgr.update()
         agent = await cluster_mgr.get_agent(state['slaveId'])
-      task.placement = agent.locality
+      task.placement = agent.locality.clone()
       hostname = agent.fqdn or agent.public_ip
       if task.container.network_mode == NetworkMode.HOST:
         endpoints = [Endpoint(hostname, p, p) for p in state.get('ports', [])]
       else:
         endpoints = [Endpoint(hostname, p['containerPort'], p['servicePort'], p['protocol'])
                      for p in body['app']['container'].get('portMappings', [])]
-      task.add_endpoints(*endpoints)
+      task.update_endpoints(*endpoints)
 
     status, body, err = await self.http_cli.get(api.host, api.port, endpoint)
     if status == 404:
@@ -220,7 +220,8 @@ class JobTaskManager(APIManager):
     assert isinstance(app, Appliance)
     assert isinstance(contr, Job)
     params = [dict(key='hostname', value=str(task.id)),
-              dict(key='rm', value='true')]
+              dict(key='rm', value='true'),
+              dict(key='privileged', value=contr.is_privileged),]
     # config persistent volumes
     data_p, p_vols = app.data_persistence, contr.persistent_volumes
     if data_p and len(p_vols) > 0:
@@ -243,6 +244,8 @@ class JobTaskManager(APIManager):
                                        for v in contr.host_volumes],
                               forcePullImage=contr.force_pull_image),
                **contr.resources.to_request())
+    if len(task.env) > 0:
+      req['environmentVariables'] += [dict(name=k, value=v) for k, v in task.env.items()]
     if contr.args:
       req['arguments'] = contr.args
     elif contr.cmd:

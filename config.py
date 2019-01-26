@@ -194,6 +194,7 @@ def get_global_scheduler():
     sched_class = config.pivot.scheduler.split('.')[-1]
     return getattr(importlib.import_module(sched_mod), sched_class)()
   except Exception as e:
-    sys.stderr.write(str(e) + '\n')
+    from commons import global_logger
+    global_logger.logger.error(e)
     from schedule.universal import DefaultGlobalScheduler
     return DefaultGlobalScheduler()

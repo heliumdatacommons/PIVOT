@@ -1,5 +1,5 @@
 pivot:
-  master: 3.82.195.222
+  master: 3.88.66.254
   port: 9191
   n_parallel: 1
   https: false
@@ -17,7 +17,7 @@ exhibitor:
   port: 8181
 ceph:
   host: localhost
-  port: 8080
+  port: 8081
 
 
 

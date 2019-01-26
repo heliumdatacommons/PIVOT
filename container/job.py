@@ -23,7 +23,7 @@ class Job(Container):
   def __init__(self, resources, network_mode=NetworkMode.HOST,
                retries=1, repeats=1, start_time='', interval='2M', *args, **kwargs):
     super(Job, self).__init__(resources=resources, network_mode=network_mode, *args, **kwargs)
-    if self.resources.gpu > 0:
+    if self.resources.gpus > 0:
       raise ValueError('GPU is not yet supported for jobs')
     self.__retries = retries
     self.__repeats = repeats

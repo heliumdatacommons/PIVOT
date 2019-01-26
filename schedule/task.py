@@ -39,6 +39,8 @@ class Task(Loggable):
       return 400, None, "Container for the task is not set"
     if 'state' in data:
       data['state'] = TaskState(data['state'].upper())
+    if data.get('placement') is not None:
+      data['placement'] = Placement(**data['placement'])
     if contr.type == ContainerType.SERVICE:
       return 200, ServiceTask(**data), None
     elif contr.type == ContainerType.JOB:
@@ -47,7 +49,7 @@ class Task(Loggable):
       return 400, None, "Unknown container type: %s"%contr.type
 
   def __init__(self, container, seqno, launch_time=None, dependencies=[], schedule_hints=None,
-               state=TaskState.TASK_NASCENT, mesos_task_id=None, *args, **kwargs):
+               state=TaskState.TASK_NASCENT, mesos_task_id=None, placement=None, *args, **kwargs):
     from container import Container
     from schedule import ScheduleHints
     assert isinstance(container, Container)
@@ -59,13 +61,14 @@ class Task(Loggable):
     assert isinstance(dependencies, Iterable) and all([isinstance(d, Task) for d in dependencies])
     self.__dependencies = dependencies
     assert schedule_hints is None or isinstance(schedule_hints, ScheduleHints)
-    self.__schedule_hints = schedule_hints
+    self.__schedule_hints = schedule_hints and schedule_hints.clone()
     assert isinstance(state, TaskState)
     self.__state = state
-    self.__endpoints = []
-    self.__placement = None
+    assert placement is None or isinstance(placement, Placement)
+    self.__placement = placement
     assert mesos_task_id is None or isinstance(mesos_task_id, str)
     self.__mesos_task_id = mesos_task_id
+    self.__env = {}
 
   @property
   def id(self):
@@ -84,6 +87,10 @@ class Task(Loggable):
     return self.__container
 
   @property
+  def resources(self):
+    return self.container and self.container.resources
+
+  @property
   def launch_time(self):
     return self.__launch_time
 
@@ -93,11 +100,7 @@ class Task(Loggable):
 
   @property
   def schedule_hints(self):
-    return self.__schedule_hints
-
-  @property
-  def endpoints(self):
-    return list(self.__endpoints)
+    return self.__schedule_hints.clone()
 
   @property
   def state(self):
@@ -124,7 +127,7 @@ class Task(Loggable):
   def schedule_hints(self, hints):
     from schedule import ScheduleHints
     assert isinstance(hints, ScheduleHints)
-    self.__schedule_hints = hints
+    self.__schedule_hints = hints.clone()
 
   @state.setter
   def state(self, state):
@@ -141,26 +144,42 @@ class Task(Loggable):
     assert mesos_task_id is None or isinstance(mesos_task_id, str)
     self.__mesos_task_id = mesos_task_id
 
+  @property
+  def env(self):
+    return dict(self.__env)
+
+  @env.setter
+  def env(self, env):
+    self.__env.update(env)
+
   def add_dependencies(self, *deps):
     assert all([isinstance(d, Task) for d in deps])
     self.__dependencies = list(set(self.__dependencies + [d.id for d in deps]))
 
-  def add_endpoints(self, *endpoints):
-    from container import Endpoint
-    assert all([isinstance(e, Endpoint) for e in endpoints])
-    self.__endpoints = list(set(self.__endpoints + list(endpoints)))
+  def update_endpoints(self, *endpoints):
+    self.container.update_endpoints(*endpoints)
+
+  def place(self, agent):
+    from schedule import ScheduleHints
+    from cluster import Agent
+    assert isinstance(agent, Agent)
+    if not self.__schedule_hints:
+      self.__schedule_hints = ScheduleHints()
+    self.__schedule_hints.placement = agent.locality.clone()
 
   def to_render(self):
     return dict(id=self.id,
                 mesos_task_id=self.mesos_task_id,
                 state=self.state.value,
-                launch_time=self.launch_time and self.launch_time.isoformat())
+                launch_time=self.launch_time and self.launch_time.isoformat(),
+                placement=self.placement and self.placement.to_render())
 
   def to_save(self):
     return dict(seqno=self.seqno,
                 mesos_task_id=self.mesos_task_id,
                 state=self.state.value,
-                launch_time=self.launch_time and self.launch_time.isoformat())
+                launch_time=self.launch_time and self.launch_time.isoformat(),
+                placement=self.placement and self.placement.to_save())
 
   def __hash__(self):
     return hash((self.container, self.seqno))
@@ -220,6 +239,15 @@ class TaskEnsemble(Loggable):
     return list(self.__cur_tasks) if self.__cur_tasks else []
 
   @property
+  def unfinished_tasks(self):
+    unfinished = [t for t in self.tasks if t.state not in (TaskState.TASK_NASCENT, TaskState.TASK_FINISHED)]
+    anomalies = [t for t in unfinished if t.state not in (TaskState.TASK_SUBMITTED, TaskState.TASK_STAGING,
+                                                          TaskState.TASK_STARTING, TaskState.TASK_RUNNING)]
+    if len(anomalies) > 0:
+      self.__cur_tasks += anomalies
+    return unfinished
+
+  @property
   def ready_tasks(self):
     cur_tasks = self.__cur_tasks
     if cur_tasks is None:
@@ -253,7 +281,7 @@ class TaskEnsemble(Loggable):
                            TaskState.TASK_FINISHED, TaskState.TASK_SUBMITTED):
         self.logger.debug('Task [%s] is in a problematic state: %s, ready for relaunch'%(t, t.state.value))
         # if the task is in a problematic state
-        t.state, t.mesos_task_id = TaskState.TASK_SUBMITTED, None
+        t.state, t.mesos_task_id = TaskState.TASK_NASCENT, None
         new_cur_tasks += t,
         ready_tasks += t,
     self.__cur_tasks = new_cur_tasks
@@ -297,12 +325,12 @@ class TaskEnsemble(Loggable):
   def get_predecessors(self, task_id):
     dag, task_idx, task_reverse_idx = self.__dag, self.__task_idx, self.__task_reverse_idx
     idx = task_reverse_idx.get(task_id)
-    return [task_idx[p] for p in dag.predecessors(idx)] if idx else []
+    return [] if idx is None else [task_idx[p] for p in dag.predecessors(idx)]
 
   def get_successors(self, task_id):
     dag, task_idx, task_reverse_idx = self.__dag, self.__task_idx, self.__task_reverse_idx
     idx = task_reverse_idx.get(task_id)
-    return [task_idx[s] for s in dag.successors(idx)] if idx else []
+    return [] if idx is None else [task_idx[s] for s in dag.successors(idx)]
 
   def get_unready_predecessor(self, task_id):
     return [p for p in self.get_predecessors(task_id)
@@ -323,9 +351,9 @@ class TaskEnsemble(Loggable):
       tasks_by_contr[c.id] = [ServiceTask(c, i) if isinstance(c, Service) else JobTask(c, i)
                               for i in range(c.instances)]
       c.add_tasks(*tasks_by_contr[c.id])
-      new_tasks = {counter + i: t for i, t in enumerate(tasks_by_contr[c.id])}
+      new_tasks = {counter + idx: t for idx, t in enumerate(tasks_by_contr[c.id])}
       task_idx.update(new_tasks)
-      task_reverse_idx.update({t.id: i for i, t in new_tasks.items()})
+      task_reverse_idx.update({t.id: idx for idx, t in new_tasks.items()})
       counter += len(new_tasks)
 
     tasks.update({t.id: t for t in task_idx.values()})
@@ -339,6 +367,7 @@ class TaskEnsemble(Loggable):
           if len(src_tasks) > 0:
             dst.add_dependencies(*src_tasks)
           for src in src_tasks:
+            # self.logger.debug('%s -> %s'%(src.id, dst.id))
             dag.add_edge(task_reverse_idx[src.id], task_reverse_idx[dst.id])
     if not nx.is_directed_acyclic_graph(dag):
       raise ValueError('Container(s) in the appliance cannot create a DAG')

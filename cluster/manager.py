@@ -148,6 +148,6 @@ class ClusterAPIManager(APIManager):
                     cloud=h['attributes']['cloud'],
                     region=h['attributes']['region'],
                     zone=h['attributes']['zone'],
-                    preemptible=bool(h['attributes']['preemptible']))
+                    preemptible=h['attributes'].get('preemptible', 'false') == 'true')
              for h in body['slaves']]
     return status, agents, None

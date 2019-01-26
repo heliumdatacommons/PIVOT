@@ -7,7 +7,6 @@ from abc import abstractmethod
 from collections import deque
 from tornado.httpclient import AsyncHTTPClient, HTTPError
 from tornado.ioloop import PeriodicCallback
-from tornado.gen import sleep
 from tornado.locks import Lock
 from motor.motor_tornado import MotorClient
 
@@ -25,7 +24,7 @@ class Singleton(type):
         return cls._instances[cls]
 
 
-class Loggable(object):
+class Loggable:
 
   @property
   def logger(self):
@@ -41,6 +40,8 @@ class Loggable(object):
       logger.addHandler(stream_hdlr)
       logger.addHandler(file_hdlr)
     return logger
+
+global_logger = Loggable()
 
 
 class MongoClient(MotorClient, metaclass=Singleton):
@@ -86,9 +87,9 @@ class AsyncHttpClientWrapper(Loggable):
         return e.code, None, e.message
       return e.code, None, e.response.body.decode('utf-8')
     except (ConnectionRefusedError, ConnectionResetError):
-      self.logger.warning('Connection refused/reset, retry after 3 seconds')
-      sleep(3)
-      return await self._fetch(host, port, endpoint, method, body, is_https, **headers)
+      self.logger.warning('Connection to %s:%d/%s refused/reset'%(host, port, endpoint))
+      # sleep(3)
+      # return await self._fetch(host, port, endpoint, method, body, is_https, **headers)
 
 
 class Manager(Loggable, metaclass=Singleton):

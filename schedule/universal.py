@@ -19,7 +19,8 @@ class GlobalSchedulerRunner(AutonomousMonitor, metaclass=Singleton):
     self.__job_mgr = JobTaskManager()
     self.__vol_mgr = volume.manager.VolumeManager()
     self.__cluster_mgr = cluster.manager.ClusterManager()
-    self.__scheduler = get_global_scheduler()
+    self.__scheduler = sched = get_global_scheduler()
+    self.logger.info('Global scheduler: %s'%sched.__class__.__name__)
     self.__local_schedulers = {}
     self.__task_q = TaskQueue()
     self.__vol_q = VolumeQueue()
@@ -52,19 +53,42 @@ class GlobalSchedulerRunner(AutonomousMonitor, metaclass=Singleton):
     agents = await cluster_mgr.get_agents(0)
     tasks = await task_q.dequeue_all()
     vols = await vol_q.dequeue_all()
-    self.logger.debug('%d tasks, %d volumes to schedule' % (len(tasks), len(vols)))
+    # self.logger.debug('%d tasks, %d volumes to schedule' % (len(tasks), len(vols)))
     ensembles = {app_id: sched.ensemble for app_id, sched in self.__local_schedulers.items()}
+    self._add_predecessor_placements(tasks, ensembles)
     tasks, vols = global_sched.schedule(tasks, vols, agents, ensembles)
+    for t in tasks:
+      if t.schedule_hints.placement:
+        self.logger.debug('Task %s is placed on %s'%(t, t.schedule_hints.placement))
     await multi([self._provision_volume(v) for v in vols])
     await multi([self._provision_task(t) for t in tasks])
+
+  @staticmethod
+  def _add_predecessor_placements(tasks, ensembles):
+    for t in tasks:
+      ensemble = ensembles[t.appliance.id]
+      from schedule.task import TaskEnsemble
+      assert isinstance(ensemble, TaskEnsemble)
+      preds = ensemble.get_predecessors(t.id)
+      if preds:
+        placements = list(set([p.placement for p in preds]))
+        data_src = dict(DATA_SRC_CLOUD=','.join([p.cloud for p in placements]),
+                        DATA_SRC_REGION=','.join([p.region for p in placements]),
+                        DATA_SRC_ZONE=','.join([p.zone for p in placements]),
+                        DATA_SRC_HOST=','.join([p.host for p in placements]))
+        t.env = data_src
 
   async def _provision_task(self, task):
     assert isinstance(task, Task)
     srv_mgr, job_mgr = self.__srv_mgr, self.__job_mgr
     if isinstance(task, ServiceTask):
-      await srv_mgr.launch_service_task(task)
+      status, _, err = await srv_mgr.launch_service_task(task)
+      if status != 200:
+        self.logge.error(err)
     elif isinstance(task, JobTask):
-      await job_mgr.launch_job_task(task)
+      status, _, err = await job_mgr.launch_job_task(task)
+      if status != 200:
+        self.logger.error(err)
 
   async def _provision_volume(self, vol):
     self.logger.info("Volume '%s' is being provisioned"%vol.id)
@@ -108,16 +132,6 @@ class DefaultGlobalScheduler(GlobalSchedulerBase):
   """
 
   def schedule(self, tasks, volumes, agents, ensembles):
-    for t in tasks:
-      ensemble = ensembles[t.appliance.id]
-      from schedule.task import TaskEnsemble
-      assert isinstance(ensemble, TaskEnsemble)
-      preds = ensemble.get_predecessors(t.id)
-      if preds:
-        placements = list(set([p.placement for p in preds]))
-        self.logger.info('Predecessors placement(s) of %s: %s'%(t.id, placements))
-      else:
-        self.logger.debug('No predecessors found for %s'%t.id)
     return tasks, volumes
 
 

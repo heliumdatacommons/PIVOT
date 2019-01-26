@@ -1,5 +1,7 @@
 import re
 import json
+import itertools
+
 import swagger
 
 import appliance as app
@@ -119,10 +121,12 @@ class Endpoint:
 
   """
 
-  def __init__(self, host, container_port, host_port, protocol='tcp', name=None, *args, **kwargs):
+  def __init__(self, host, container_port, host_port, task_id, protocol='tcp', name=None, *args, **kwargs):
     self.__host = host
     self.__host_port = host_port
     self.__container_port = container_port
+    assert isinstance(task_id, str)
+    self.__task_id = task_id
     self.__protocol = protocol
     self.__name = name
 
@@ -169,6 +173,18 @@ class Endpoint:
 
   @property
   @swagger.property
+  def task_id(self):
+    """
+    Task ID the endpoint is associated with
+    ---
+    type: str
+    example: 0
+
+    """
+    return self.__task_id
+
+  @property
+  @swagger.property
   def protocol(self):
     """
     The transport protocol for communication
@@ -196,21 +212,22 @@ class Endpoint:
     self.__name = name
 
   def to_render(self):
-    return dict(host=self.__host, host_port=self.__host_port,
-                container_port=self.__container_port, protocol=self.__protocol, name=self.__name)
+    return dict(host=self.host, host_port=self.host_port, container_port=self.container_port,
+                task_id=self.task_id, protocol=self.protocol, name=self.name)
 
   def to_save(self):
     return self.to_render()
 
   def __hash__(self):
-    return hash((self.host, self.host_port, self.container_port, self.protocol, self.name))
+    return hash((self.host, self.host_port, self.container_port, self.task_id, self.protocol, self.name))
 
   def __eq__(self, other):
     return isinstance(other, Endpoint) \
            and self.host == other.host \
            and self.host_port == other.host_port \
            and self.container_port == other.container_port \
-           and self.name == other.name
+           and self.task_id == other.task_id \
+           and self.protocol == other.protocol
 
   def __repr__(self):
     return str(self.to_render())
@@ -308,7 +325,7 @@ class Resources:
     self.__cpus = cpus
     self.__mem = mem
     self.__disk = disk
-    self.__gpu = gpu
+    self.__gpus = gpu
 
   @property
   @swagger.property
@@ -353,7 +370,7 @@ class Resources:
 
   @property
   @swagger.property
-  def gpu(self):
+  def gpus(self):
     """
     Number of GPU units
     ---
@@ -362,11 +379,11 @@ class Resources:
     example: 1
 
     """
-    return self.__gpu
+    return self.__gpus
 
   def to_render(self):
     return dict(cpus=self.cpus, mem=self.mem,
-                disk=self.disk, gpu=self.gpu)
+                disk=self.disk, gpus=self.gpus)
 
   def to_save(self):
     return self.to_render()
@@ -399,6 +416,10 @@ class ContainerScheduleHints(schedule.ScheduleHints):
 
     """
     return self.__preemptible
+
+  def clone(self):
+    return ContainerScheduleHints(preemptible=self.preemptible,
+                                  placement=self.placement and self.placement.clone())
 
   def to_render(self):
     return dict(**super(ContainerScheduleHints, self).to_render(), preemptible=self.preemptible)
@@ -564,7 +585,8 @@ class Container:
     self.__volumes = [ContainerVolume(**v) for v in volumes]
     self.__network_mode = network_mode if isinstance(network_mode, NetworkMode) \
                           else NetworkMode(network_mode.upper())
-    self.__endpoints = [Endpoint(**e) for e in endpoints]
+    self.__endpoints = {task_id: [Endpoint(**e) for e in es]
+                        for task_id, es in itertools.groupby(endpoints, key=lambda x: x['task_id'])}
     self.__ports = [Port(**p) for p in ports]
     self.__is_privileged = is_privileged
     self.__force_pull_image = force_pull_image
@@ -743,7 +765,7 @@ class Container:
     read_only: true
 
     """
-    return list(self.__endpoints)
+    return list(itertools.chain(*self.__endpoints.values()))
 
   @property
   @swagger.property
@@ -866,10 +888,6 @@ class Container:
     assert isinstance(appliance, str) or isinstance(appliance, app.Appliance)
     self.__appliance = appliance
 
-  @endpoints.setter
-  def endpoints(self, endpoints):
-    self.__endpoints = list(endpoints)
-
   @schedule_hints.setter
   def schedule_hints(self, hints):
     assert isinstance(hints, ContainerScheduleHints)
@@ -881,6 +899,11 @@ class Container:
   def add_tasks(self, *tasks):
     assert all([isinstance(t, schedule.task.Task) for t in tasks])
     self.__tasks = list(set(self.__tasks + list(tasks)))
+
+  def update_endpoints(self, *endpoints):
+    assert all([isinstance(e, Endpoint) for e in endpoints])
+    for task_id, es in itertools.groupby(endpoints, key=lambda e: e.task_id):
+      self.__endpoints[task_id] = list(es)
 
   def to_render(self):
     return dict(id=self.id,
